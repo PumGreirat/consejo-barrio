@@ -24,30 +24,38 @@ export default function ReportsTab({ profile, reports, onRefresh }: Props) {
   const isBish = isBishopric(profile.role)
 
   // Filter: own org reports + (if bishop) all published
-  const myReports = reports.filter(r =>
-    r.org_id === org.id || (isBish && r.status === 'published')
-  )
+  const myReports = reports.filter(r => r.org_id === org.id)
 
-  async function createReport() {
-    if (!newName.trim()) return
-    setCreating(true)
-    const { data, error } = await supabase.from('reports').insert({
-      org_id: org.id,
-      created_by: profile.id,
-      created_by_name: profile.name,
-      name: newName.trim(),
-      council_date: newDate || null,
-      status: 'draft',
-      data: emptyReportData(),
-    }).select().single()
-    setCreating(false)
-    if (data) {
-      await onRefresh()
-      setActiveReport(data as Report)
-      setShowNewModal(false)
-      setNewName('')
-    }
+function getNextSunday(from: Date = new Date()): string {
+  const day = from.getDay()
+  const diff = day === 0 ? 0 : 7 - day
+  const sunday = new Date(from)
+  sunday.setDate(from.getDate() + diff)
+  return sunday.toISOString().split('T')[0]
+}
+
+async function createReport() {
+  if (!newName.trim()) return
+  setCreating(true)
+  const sunday = getNextSunday(newDate ? new Date(newDate + 'T12:00:00') : new Date())
+  const { data } = await supabase.from('reports').insert({
+    org_id: org.id,
+    created_by: profile.id,
+    created_by_name: profile.name,
+    name: newName.trim(),
+    council_date: newDate || null,
+    council_sunday: sunday,
+    status: 'draft',
+    data: emptyReportData(),
+  }).select().single()
+  setCreating(false)
+  if (data) {
+    await onRefresh()
+    setActiveReport(data as Report)
+    setShowNewModal(false)
+    setNewName('')
   }
+}
 
   if (activeReport) {
     return (
