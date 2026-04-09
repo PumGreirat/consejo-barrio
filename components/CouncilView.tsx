@@ -1,5 +1,4 @@
 'use client'
-import React from 'react'
 import { useState } from 'react'
 import { Report, SECTIONS, ORGS, getMuType, isBishopric, Profile } from '@/types'
 import { createClient } from '@/lib/supabase'
