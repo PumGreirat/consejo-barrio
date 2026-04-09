@@ -126,7 +126,7 @@ function ItemCardInner({ it, sid, sec, repId, orgColor, profile, onResolve }: an
   const { useState } = require('react')
   const [showForm, setShowForm] = useState(false)
   const [note, setNote] = useState('')
-  const [mode, setMode] = useState<'resolve'|'reply'>('resolve')
+  const [mode, setMode] = useState('resolve' as 'resolve' | 'reply')
   const resolved = !!it.resolution
   const canReply = sec.isObisp && isBishopric(profile.role) && !resolved
   const canResolve = !resolved && isBishopric(profile.role)
@@ -227,3 +227,4 @@ function priColor(p: string) {
   if (p.includes('Importante') || p === 'Menos activo' || p === 'Necesita visita' || p === 'Pregunta') return { bg: '#fef3c7', c: '#92400e' }
   return { bg: '#f1f5f9', c: '#475569' }
 }
+
