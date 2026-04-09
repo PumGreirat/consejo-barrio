@@ -167,6 +167,7 @@ export interface Report {
   created_by_name: string
   name: string
   council_date: string | null
+  council_sunday: string | null
   status: 'draft' | 'published'
   data: ReportData
   created_at: string
