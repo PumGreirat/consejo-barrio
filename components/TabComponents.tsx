@@ -9,23 +9,66 @@ import { Plus, X } from 'lucide-react'
 // ── EVENTS TAB ────────────────────────────────────────────────
 export function EventsTab({ events, onRefresh, profile }: { events: Event[]; onRefresh: () => Promise<void>; profile: Profile }) {
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const supabase = createClient()
+  const canEdit = isBishopric(profile.role)
+
+  // Form state
   const [name, setName] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [time, setTime] = useState('')
   const [resp, setResp] = useState('')
   const [notes, setNotes] = useState('')
-  const [sync, setSync] = useState<'pending'|'synced'>('pending')
-  const [saving, setSaving] = useState(false)
-  const supabase = createClient()
+  const [sync, setSync] = useState<'pending' | 'synced'>('pending')
+
+  function resetForm() { setName(''); setDate(new Date().toISOString().split('T')[0]); setTime(''); setResp(''); setNotes(''); setSync('pending') }
+
+  function openNew() { resetForm(); setEditingId(null); setShowModal(true) }
+
+  function openEdit(ev: Event) {
+    setName(ev.name)
+    setDate(ev.event_date)
+    setTime(ev.event_time ?? '')
+    setResp(ev.responsible ?? '')
+    setNotes(ev.notes ?? '')
+    setSync(ev.sync_status)
+    setEditingId(ev.id)
+    setShowModal(true)
+  }
 
   async function saveEvent() {
     if (!name.trim() || !date) return
     setSaving(true)
-    await supabase.from('events').insert({ name: name.trim(), event_date: date, event_time: time || null, responsible: resp || null, notes: notes || null, sync_status: sync, created_by: profile.id })
+    if (editingId) {
+      await supabase.from('events').update({
+        name: name.trim(), event_date: date, event_time: time || null,
+        responsible: resp || null, notes: notes || null, sync_status: sync
+      }).eq('id', editingId)
+    } else {
+      await supabase.from('events').insert({
+        name: name.trim(), event_date: date, event_time: time || null,
+        responsible: resp || null, notes: notes || null, sync_status: sync,
+        created_by: profile.id
+      })
+    }
     setSaving(false)
-    await onRefresh()
     setShowModal(false)
-    setName(''); setTime(''); setResp(''); setNotes(''); setSync('pending')
+    resetForm()
+    setEditingId(null)
+    await onRefresh()
+  }
+
+  async function deleteEvent(id: string, evName: string) {
+    if (!confirm(`¿Eliminar el evento "${evName}"?`)) return
+    await supabase.from('events').delete().eq('id', id)
+    await onRefresh()
+  }
+
+  async function toggleSync(ev: Event) {
+    const newSync = ev.sync_status === 'synced' ? 'pending' : 'synced'
+    await supabase.from('events').update({ sync_status: newSync }).eq('id', ev.id)
+    await onRefresh()
   }
 
   return (
@@ -35,7 +78,7 @@ export function EventsTab({ events, onRefresh, profile }: { events: Event[]; onR
           <h2 className="font-serif text-xl text-navy font-semibold">📅 Próximos Eventos</h2>
           <p className="text-xs text-gray-400 mt-1">Calendario del barrio y estado en Church Tools</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn btn-navy btn-sm"><Plus size={14} /> Añadir</button>
+        <button onClick={openNew} className="btn btn-navy btn-sm"><Plus size={14} /> Añadir</button>
       </div>
 
       {!events.length ? (
@@ -45,41 +88,88 @@ export function EventsTab({ events, onRefresh, profile }: { events: Event[]; onR
           {events.map(ev => {
             const d = new Date(ev.event_date + 'T12:00:00')
             const mon = format(d, 'MMM', { locale: es }).replace('.', '').toUpperCase()
+            const synced = ev.sync_status === 'synced'
             return (
               <div key={ev.id} className="flex items-center gap-4 py-3.5">
-                <div className="min-w-[52px] text-center bg-navy text-white rounded-xl py-2 px-1.5">
+                {/* Calendar */}
+                <div className="min-w-[52px] text-center bg-navy text-white rounded-xl py-2 px-1.5 flex-shrink-0">
                   <div className="text-2xl font-bold leading-none">{d.getDate()}</div>
                   <div className="text-[10px] uppercase tracking-wide opacity-80 mt-0.5">{mon}</div>
                 </div>
-                <div className="flex-1">
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm text-navy">{ev.name}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {ev.responsible}{ev.event_time ? ' · ' + ev.event_time : ''}{ev.notes ? ' · ' + ev.notes : ''}
                   </p>
                 </div>
-                <span className={`text-[11px] font-bold px-3 py-1 rounded-full whitespace-nowrap ${ev.sync_status === 'synced' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {ev.sync_status === 'synced' ? '✓ En calendario' : '⏳ Pendiente'}
-                </span>
+
+                {/* Sync status — clickable for admins */}
+                <button
+                  onClick={() => canEdit && toggleSync(ev)}
+                  className={`text-[11px] font-bold px-3 py-1 rounded-full whitespace-nowrap transition-colors ${
+                    synced
+                      ? 'bg-green-100 text-green-700 ' + (canEdit ? 'hover:bg-green-200 cursor-pointer' : 'cursor-default')
+                      : 'bg-amber-100 text-amber-700 ' + (canEdit ? 'hover:bg-amber-200 cursor-pointer' : 'cursor-default')
+                  }`}
+                  title={canEdit ? (synced ? 'Clic para marcar como pendiente' : 'Clic para marcar como separado') : ''}
+                >
+                  {synced ? '✓ En calendario' : '⏳ Pendiente'}
+                </button>
+
+                {/* Edit / Delete — only for admins */}
+                {canEdit && (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => openEdit(ev)}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-300 hover:text-navy hover:bg-gray-100 transition-colors"
+                      title="Editar evento"
+                    ><Pencil size={13} /></button>
+                    <button
+                      onClick={() => deleteEvent(ev.id, ev.name)}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title="Eliminar evento"
+                    ><Trash2 size={13} /></button>
+                  </div>
+                )}
               </div>
             )
           })}
         </div>
       )}
 
+      {/* MODAL — Add / Edit */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl">
-            <h3 className="font-serif text-xl text-navy font-semibold mb-1">Añadir Evento</h3>
-            <p className="text-sm text-gray-400 mb-5">Registra un evento del barrio</p>
+            <h3 className="font-serif text-xl text-navy font-semibold mb-1">{editingId ? 'Editar Evento' : 'Añadir Evento'}</h3>
+            <p className="text-sm text-gray-400 mb-5">{editingId ? 'Modifica los datos del evento' : 'Registra un nuevo evento del barrio'}</p>
             <div className="space-y-3">
-              <div><label className="label">Nombre del evento</label><input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Ej: Actividad familiar" autoFocus /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="label">Fecha</label><input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
-                <div><label className="label">Hora (opcional)</label><input className="input" type="time" value={time} onChange={e => setTime(e.target.value)} /></div>
+              <div>
+                <label className="label">Nombre del evento</label>
+                <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Ej: Actividad familiar" autoFocus />
               </div>
-              <div><label className="label">Responsable</label><input className="input" value={resp} onChange={e => setResp(e.target.value)} placeholder="Ej: Sociedad de Socorro" /></div>
-              <div><label className="label">Notas</label><textarea className="input min-h-[56px] resize-none" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Detalles..." /></div>
-              <div><label className="label">Estado en Church Tools</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Fecha</label>
+                  <input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Hora (opcional)</label>
+                  <input className="input" type="time" value={time} onChange={e => setTime(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className="label">Responsable</label>
+                <input className="input" value={resp} onChange={e => setResp(e.target.value)} placeholder="Ej: Sociedad de Socorro" />
+              </div>
+              <div>
+                <label className="label">Notas</label>
+                <textarea className="input min-h-[56px] resize-none" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Detalles..." />
+              </div>
+              <div>
+                <label className="label">Estado en Church Tools</label>
                 <select className="input" value={sync} onChange={e => setSync(e.target.value as any)}>
                   <option value="pending">⏳ Pendiente de separar en calendario</option>
                   <option value="synced">✅ Ya separado en Church Tools</option>
@@ -87,8 +177,10 @@ export function EventsTab({ events, onRefresh, profile }: { events: Event[]; onR
               </div>
             </div>
             <div className="flex gap-2.5 mt-5">
-              <button className="btn btn-navy" onClick={saveEvent} disabled={saving || !name.trim() || !date}>{saving ? 'Guardando...' : 'Guardar evento'}</button>
-              <button className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancelar</button>
+              <button className="btn btn-navy" onClick={saveEvent} disabled={saving || !name.trim() || !date}>
+                {saving ? 'Guardando...' : editingId ? '💾 Guardar cambios' : 'Añadir evento'}
+              </button>
+              <button className="btn btn-ghost" onClick={() => { setShowModal(false); resetForm(); setEditingId(null) }}>Cancelar</button>
             </div>
           </div>
         </div>
@@ -96,6 +188,7 @@ export function EventsTab({ events, onRefresh, profile }: { events: Event[]; onR
     </div>
   )
 }
+
 
 // ── MEMBERS TAB ───────────────────────────────────────────────
 export function MembersTab({ members }: { members: Profile[] }) {
