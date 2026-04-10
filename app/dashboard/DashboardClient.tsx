@@ -65,7 +65,7 @@ export default function DashboardClient({ profile }: { profile: Profile }) {
     <div className="flex flex-col min-h-screen bg-cream">
       <header className="bg-navy text-white h-[62px] px-5 flex items-center justify-between sticky top-0 z-50 shadow-lg">
         <div className="flex items-center gap-3">
-          <span className="text-[#d4a044] text-xl">✝</span>
+          <span className="text-[#d4a044] text-xl">📋</span>
           <h1 className="font-serif text-[19px] font-semibold">Consejo de Barrio</h1>
         </div>
         <div className="flex items-center gap-2.5">
