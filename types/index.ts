@@ -24,6 +24,9 @@ export const ROLE_LABELS: Record<string, string> = {
   pres_pm: 'Presidenta Primaria',
   c1_pm: 'Consejera Primaria',
   sec_pm: 'Secretaria Primaria',
+  pres_ed: 'Pte. Escuela Dominical',
+  c1_ed: 'Consejero - E. Dominical',
+  sec_ed: 'Secretario - E. Dominical',
 }
 
 export const ORGS = [
