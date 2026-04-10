@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase'
 import { Event, Notification, Profile, ORGS, ROLE_LABELS, getMuType, isBishopric } from '@/types'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Pencil, Trash2 } from 'lucide-react'
 
 // ── EVENTS TAB ────────────────────────────────────────────────
 export function EventsTab({ events, onRefresh, profile }: { events: Event[]; onRefresh: () => Promise<void>; profile: Profile }) {
