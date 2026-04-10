@@ -4,7 +4,7 @@ import { Report, SECTIONS, ORGS, getMuType, isBishopric, Profile } from '@/types
 import { createClient } from '@/lib/supabase'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ChevronDown, ChevronUp, AlertTriangle, CheckCircle, AlertCircle } from 'lucide-react'
+import { ChevronDown, ChevronUp, AlertTriangle, CheckCircle, AlertCircle, Pencil, Trash2 } from 'lucide-react'
 
 interface Props { reports: Report[]; profile: Profile; onRefresh: () => Promise<void> }
 
@@ -19,6 +19,8 @@ interface SundayFolder {
 
 export default function CouncilView({ reports, profile, onRefresh }: Props) {
   const [openFolder, setOpenFolder] = useState<string | null>(null)
+  const [editingLabel, setEditingLabel] = useState<string | null>(null)
+  const [labelValue, setLabelValue] = useState('')
   const supabase = createClient()
 
   if (!isBishopric(profile.role)) {
@@ -27,7 +29,6 @@ export default function CouncilView({ reports, profile, onRefresh }: Props) {
 
   const published = reports.filter(r => r.status === 'published')
 
-  // Group by council_sunday
   const folderMap = new Map<string, Report[]>()
   published.forEach(r => {
     const key = r.council_sunday ?? r.council_date ?? 'sin-fecha'
@@ -35,7 +36,6 @@ export default function CouncilView({ reports, profile, onRefresh }: Props) {
     folderMap.get(key)!.push(r)
   })
 
-  // Build folder objects sorted by date descending
   const folders: SundayFolder[] = Array.from(folderMap.entries())
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([sunday, reps]) => {
@@ -43,38 +43,54 @@ export default function CouncilView({ reports, profile, onRefresh }: Props) {
       reps.forEach(r => {
         Object.values(r.data ?? {}).forEach((arr: any[]) => {
           arr.forEach((item: any) => {
+            if (item._folder_label !== undefined) return
             totalItems++
             if (item.resolution) resolvedItems++
-            else {
-              if (item.pri?.includes('Urgente')) urgentUnresolved++
-            }
+            else if (item.pri?.includes('Urgente')) urgentUnresolved++
           })
         })
       })
-      return {
-        sunday,
-        reports: reps,
-        totalItems,
-        resolvedItems,
-        urgentUnresolved,
-        hasUnresolved: resolvedItems < totalItems,
-      }
+      return { sunday, reports: reps, totalItems, resolvedItems, urgentUnresolved, hasUnresolved: resolvedItems < totalItems }
     })
 
   function formatSunday(dateStr: string) {
     if (dateStr === 'sin-fecha') return 'Sin fecha asignada'
-    try {
-      return format(parseISO(dateStr), "EEEE d 'de' MMMM, yyyy", { locale: es })
-    } catch { return dateStr }
+    try { return format(parseISO(dateStr), "EEEE d 'de' MMMM, yyyy", { locale: es }) } catch { return dateStr }
   }
 
   function isCurrentSunday(dateStr: string) {
     const today = new Date()
-    const day = today.getDay()
-    const diff = day === 0 ? 0 : 7 - day
-    const nextSunday = new Date(today)
-    nextSunday.setDate(today.getDate() + diff)
-    return dateStr === nextSunday.toISOString().split('T')[0]
+    const diff = today.getDay() === 0 ? 0 : 7 - today.getDay()
+    const next = new Date(today)
+    next.setDate(today.getDate() + diff)
+    return dateStr === next.toISOString().split('T')[0]
+  }
+
+  function getFolderLabel(folder: SundayFolder): string {
+    for (const rep of folder.reports) {
+      const lbl = (rep.data as any)?._folder_label
+      if (lbl) return lbl
+    }
+    return formatSunday(folder.sunday)
+  }
+
+  async function deleteFolder(folder: SundayFolder) {
+    const name = getFolderLabel(folder)
+    if (!confirm(`¿Eliminar la carpeta "${name}"?\n\nLos reportes volverán a borrador y dejarán de aparecer en la Vista del Consejo.`)) return
+    for (const rep of folder.reports) {
+      await supabase.from('reports').update({ status: 'draft' }).eq('id', rep.id)
+    }
+    await onRefresh()
+  }
+
+  async function saveLabel(folder: SundayFolder) {
+    for (const rep of folder.reports) {
+      await supabase.from('reports').update({
+        data: { ...(rep.data as any), _folder_label: labelValue.trim() || null }
+      }).eq('id', rep.id)
+    }
+    setEditingLabel(null)
+    await onRefresh()
   }
 
   return (
@@ -96,22 +112,17 @@ export default function CouncilView({ reports, profile, onRefresh }: Props) {
           {folders.map(folder => {
             const isOpen = openFolder === folder.sunday
             const isCurrent = isCurrentSunday(folder.sunday)
-            const allDone = !folder.hasUnresolved
+            const allDone = !folder.hasUnresolved && folder.totalItems > 0
             const hasUrgent = folder.urgentUnresolved > 0
+            const displayLabel = getFolderLabel(folder)
+            const isEditing = editingLabel === folder.sunday
 
             return (
-              <div key={folder.sunday} className={`border-[1.5px] rounded-xl overflow-hidden transition-all ${
-                isCurrent ? 'border-gold' : 'border-[#ddd6c8]'
-              }`}>
-                {/* Folder header */}
-                <button
-                  onClick={() => setOpenFolder(isOpen ? null : folder.sunday)}
-                  className="w-full flex items-center gap-4 p-4 bg-cream hover:bg-cream-dark transition-colors text-left"
-                >
+              <div key={folder.sunday} className={`border-[1.5px] rounded-xl overflow-hidden ${isCurrent ? 'border-gold' : 'border-[#ddd6c8]'}`}>
+                <div className="flex items-center gap-3 p-4 bg-cream hover:bg-cream-dark transition-colors">
                   {/* Calendar icon */}
-                  <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0 ${
-                    isCurrent ? 'bg-navy text-white' : 'bg-white border border-[#ddd6c8]'
-                  }`}>
+                  <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0 cursor-pointer ${isCurrent ? 'bg-navy text-white' : 'bg-white border border-[#ddd6c8]'}`}
+                    onClick={() => setOpenFolder(isOpen ? null : folder.sunday)}>
                     <span className="text-[10px] font-bold uppercase opacity-70">
                       {folder.sunday !== 'sin-fecha' ? format(parseISO(folder.sunday), 'MMM', { locale: es }).toUpperCase() : '—'}
                     </span>
@@ -120,40 +131,65 @@ export default function CouncilView({ reports, profile, onRefresh }: Props) {
                     </span>
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-bold text-sm text-navy capitalize">{formatSunday(folder.sunday)}</p>
-                      {isCurrent && <span className="text-[10px] font-bold bg-gold text-white px-2 py-0.5 rounded-full">Próximo consejo</span>}
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {folder.reports.length} org · {folder.totalItems} items · {folder.resolvedItems} resueltos
-                    </p>
+                  {/* Title area */}
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => !isEditing && setOpenFolder(isOpen ? null : folder.sunday)}>
+                    {isEditing ? (
+                      <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                        <input
+                          className="input text-sm py-1.5 flex-1"
+                          value={labelValue}
+                          onChange={e => setLabelValue(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveLabel(folder); if (e.key === 'Escape') setEditingLabel(null) }}
+                          autoFocus
+                        />
+                        <button onClick={() => saveLabel(folder)} className="btn btn-navy btn-sm">✓</button>
+                        <button onClick={() => setEditingLabel(null)} className="btn btn-ghost btn-sm">✕</button>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-sm text-navy capitalize">{displayLabel}</p>
+                          {isCurrent && <span className="text-[10px] font-bold bg-gold text-white px-2 py-0.5 rounded-full">Próximo consejo</span>}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">{folder.reports.length} org · {folder.totalItems} items · {folder.resolvedItems} resueltos</p>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Status indicator */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Status indicators */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap">
                     {hasUrgent && (
-                      <div className="flex items-center gap-1 bg-red-100 text-red-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
-                        <AlertCircle size={12} />
-                        {folder.urgentUnresolved} urgente{folder.urgentUnresolved > 1 ? 's' : ''}
+                      <div className="flex items-center gap-1 bg-red-100 text-red-700 text-[11px] font-bold px-2 py-0.5 rounded-full">
+                        <AlertCircle size={11} /> {folder.urgentUnresolved} urgente{folder.urgentUnresolved > 1 ? 's' : ''}
                       </div>
                     )}
                     {folder.hasUnresolved && !hasUrgent && (
-                      <div className="flex items-center gap-1 bg-amber-100 text-amber-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
-                        <AlertTriangle size={12} />
-                        {folder.totalItems - folder.resolvedItems} pendiente{folder.totalItems - folder.resolvedItems > 1 ? 's' : ''}
+                      <div className="flex items-center gap-1 bg-amber-100 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-full">
+                        <AlertTriangle size={11} /> {folder.totalItems - folder.resolvedItems} pendiente{folder.totalItems - folder.resolvedItems > 1 ? 's' : ''}
                       </div>
                     )}
-                    {allDone && folder.totalItems > 0 && (
-                      <div className="flex items-center gap-1 bg-green-100 text-green-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
-                        <CheckCircle size={12} /> Completo
+                    {allDone && (
+                      <div className="flex items-center gap-1 bg-green-100 text-green-700 text-[11px] font-bold px-2 py-0.5 rounded-full">
+                        <CheckCircle size={11} /> Completo
                       </div>
                     )}
-                    {isOpen ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                    {/* Admin actions */}
+                    <button
+                      onClick={e => { e.stopPropagation(); setEditingLabel(folder.sunday); setLabelValue(displayLabel) }}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-navy hover:bg-white transition-colors"
+                      title="Renombrar carpeta"
+                    ><Pencil size={13} /></button>
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteFolder(folder) }}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      title="Eliminar carpeta"
+                    ><Trash2 size={13} /></button>
+                    <button onClick={() => setOpenFolder(isOpen ? null : folder.sunday)} className="text-gray-400 ml-1">
+                      {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
                   </div>
-                </button>
+                </div>
 
-                {/* Folder content */}
                 {isOpen && (
                   <div className="border-t border-[#ddd6c8] p-4">
                     <FolderContent reports={folder.reports} profile={profile} onRefresh={onRefresh} />
@@ -181,6 +217,15 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
     await onRefresh()
   }
 
+  async function deleteItem(reportId: string, sid: string, itemId: string) {
+    if (!confirm('¿Eliminar este asunto de la Vista del Consejo?')) return
+    const rep = reports.find(r => r.id === reportId)
+    if (!rep) return
+    const items = ((rep.data as any)[sid] ?? []).filter((i: any) => i.id !== itemId)
+    await supabase.from('reports').update({ data: { ...rep.data, [sid]: items } }).eq('id', reportId)
+    await onRefresh()
+  }
+
   async function resolveMu(reportId: string, itemId: string, note: string) {
     const rep = reports.find(r => r.id === reportId)
     if (!rep) return
@@ -191,17 +236,20 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
     await onRefresh()
   }
 
-  // Stats for this folder
+  async function deleteMuItem(reportId: string, itemId: string) {
+    if (!confirm('¿Eliminar esta actualización?')) return
+    const rep = reports.find(r => r.id === reportId)
+    if (!rep) return
+    const items = (rep.data.datos_miembros ?? []).filter((i: any) => i.id !== itemId)
+    await supabase.from('reports').update({ data: { ...rep.data, datos_miembros: items } }).eq('id', reportId)
+    await onRefresh()
+  }
+
   let total = 0, resolved = 0
-  reports.forEach(r => {
-    Object.values(r.data ?? {}).forEach((arr: any[]) => {
-      arr.forEach((i: any) => { total++; if (i.resolution) resolved++ })
-    })
-  })
+  reports.forEach(r => { Object.values(r.data ?? {}).forEach((arr: any[]) => { arr.forEach((i: any) => { total++; if (i.resolution) resolved++ }) }) })
 
   return (
     <div>
-      {/* Mini stats */}
       <div className="flex gap-2 mb-4 flex-wrap">
         <div className="bg-navy text-white rounded-lg px-3 py-2 text-xs font-bold">{reports.length} org</div>
         <div className="bg-cream border border-[#ddd6c8] rounded-lg px-3 py-2 text-xs font-bold text-navy">{total} items</div>
@@ -212,8 +260,7 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
       {SECTIONS.map(s => {
         const blocks: { org: typeof ORGS[number]; items: any[]; repId: string }[] = []
         ORGS.forEach(org => {
-          const rep = reports.filter(r => r.org_id === org.id).sort((a, b) =>
-            new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0]
+          const rep = reports.filter(r => r.org_id === org.id).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0]
           if (!rep) return
           const items = (rep.data as any)[s.id] ?? []
           if (!items.length) return
@@ -237,8 +284,8 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
                   <span className="text-xs font-bold uppercase tracking-wide" style={{ color: org.color }}>{org.name}</span>
                 </div>
                 {s.isMU
-                  ? items.map((it: any) => <MUCard key={it.id} it={it} repId={repId} profile={profile} onResolve={resolveMu} />)
-                  : items.map((it: any) => <ItemCard key={it.id} it={it} sid={s.id} sec={s} repId={repId} orgColor={org.color} profile={profile} onResolve={resolveItem} />)
+                  ? items.map((it: any) => <MUCard key={it.id} it={it} repId={repId} profile={profile} onResolve={resolveMu} onDelete={deleteMuItem} />)
+                  : items.map((it: any) => <ItemCard key={it.id} it={it} sid={s.id} sec={s} repId={repId} orgColor={org.color} profile={profile} onResolve={resolveItem} onDelete={deleteItem} />)
                 }
               </div>
             ))}
@@ -249,7 +296,7 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
   )
 }
 
-function ItemCard({ it, sid, sec, repId, orgColor, profile, onResolve }: any) {
+function ItemCard({ it, sid, sec, repId, orgColor, profile, onResolve, onDelete }: any) {
   const [showForm, setShowForm] = useState(false)
   const [note, setNote] = useState('')
   const [mode, setMode] = useState('resolve' as 'resolve' | 'reply')
@@ -261,7 +308,12 @@ function ItemCard({ it, sid, sec, repId, orgColor, profile, onResolve }: any) {
   return (
     <div className={`rounded-xl p-3.5 mb-2 border-l-[3px] ${resolved ? 'opacity-60 bg-gray-50' : ''}`}
       style={!resolved ? { background: sec.bg, borderLeftColor: orgColor } : { borderLeftColor: '#94a3b8' }}>
-      <p className={`font-bold text-sm mb-1 ${resolved ? 'line-through text-gray-400' : ''}`}>{it.title}</p>
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <p className={`font-bold text-sm ${resolved ? 'line-through text-gray-400' : ''}`}>{it.title}</p>
+        <button onClick={() => onDelete(repId, sid, it.id)} className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0" title="Eliminar asunto">
+          <Trash2 size={13} />
+        </button>
+      </div>
       {it.body && <p className="text-sm text-gray-600 mb-2">{it.body}</p>}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full" style={{ background: pc.bg, color: pc.c }}>{it.pri}</span>
@@ -295,7 +347,7 @@ function ItemCard({ it, sid, sec, repId, orgColor, profile, onResolve }: any) {
   )
 }
 
-function MUCard({ it, repId, profile, onResolve }: any) {
+function MUCard({ it, repId, profile, onResolve, onDelete }: any) {
   const [showForm, setShowForm] = useState(false)
   const [note, setNote] = useState('')
   const mt = getMuType(it.muType)
@@ -307,7 +359,12 @@ function MUCard({ it, repId, profile, onResolve }: any) {
     <div className="rounded-xl p-3.5 mb-2.5 border-[1.5px]" style={{ background: MU_BG[it.muType] ?? '#f8fafc', borderColor: MU_BD[it.muType] ?? '#cbd5e1' }}>
       <div className="flex items-center justify-between gap-2 mb-2">
         <p className="font-bold text-sm">{it.memberName}</p>
-        <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-700">{mt.label}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-700">{mt.label}</span>
+          <button onClick={() => onDelete(repId, it.id)} className="text-gray-300 hover:text-red-500 transition-colors" title="Eliminar">
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {mt.fields.filter((f: any) => it.fields?.[f.id]).map((f: any) => (
@@ -319,16 +376,14 @@ function MUCard({ it, repId, profile, onResolve }: any) {
       </div>
       {done ? (
         <div className="mt-2.5 p-2.5 bg-green-50 border border-green-200 rounded-lg">
-          <p className="text-[11px] font-bold text-green-700">✅ Actualizado en registros · {it.resolution.by}</p>
+          <p className="text-[11px] font-bold text-green-700">✅ Actualizado · {it.resolution.by}</p>
           {it.resolution.note && <p className="text-xs text-gray-600 mt-0.5">{it.resolution.note}</p>}
         </div>
       ) : it.readBySec ? (
         <div className="mt-2.5">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <span className="text-xs font-bold text-green-700">✓ Recibido por el Secretario</span>
-            {isBishopric(profile.role) && (
-              <button onClick={() => setShowForm(true)} className="btn btn-green btn-sm text-xs">✅ Marcar actualizado</button>
-            )}
+            {isBishopric(profile.role) && <button onClick={() => setShowForm(true)} className="btn btn-green btn-sm text-xs">✅ Marcar actualizado</button>}
           </div>
           {showForm && (
             <div className="mt-2.5 p-3 bg-blue-50 border border-blue-200 rounded-xl">
