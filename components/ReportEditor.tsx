@@ -225,7 +225,7 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
                     )}
                     {s.isMU
                       ? <MUSection items={getMuItems()} profile={profile} published={published} onAdd={addMuItem} onDelete={deleteMuItem} onResolve={resolveMuItem} />
-                      : <ItemSection sid={s.id} sec={s as any} items={getItems(s.id)} profile={profile} published={published} onAdd={addItem} onDelete={deleteItem} onEdit={editItem} onResolve={resolveItem} />
+                      : <ItemSection sid={s.id} sec={s as any} items={getItems(s.id)} profile={profile} published={published} isBish={isBish} onAdd={addItem} onDelete={deleteItem} onEdit={editItem} onResolve={resolveItem} />
                     }
                   </div>
                 )}
@@ -250,7 +250,7 @@ function ItemSection({ sid, sec, items, profile, published, onAdd, onDelete, onE
   const [editTitle, setEditTitle] = useState('')
   const [editBody, setEditBody] = useState('')
   const [editPri, setEditPri] = useState('')
-  const isBish = isBishopric(profile.role)
+  
 
   async function submit() {
     await onAdd(sid, title, body, pri)
