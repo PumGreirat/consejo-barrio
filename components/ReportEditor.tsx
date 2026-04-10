@@ -1,8 +1,8 @@
 'use client'
 import { useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Profile, Report, ReportItem, MemberUpdateItem, SECTIONS, MU_TYPES, getMuType, isBishopric, emptyReportData } from '@/types'
-import { ChevronDown, ChevronUp, Plus, X, CheckCircle, RotateCcw, MessageSquare } from 'lucide-react'
+import { Profile, Report, ReportItem, MemberUpdateItem, SECTIONS, MU_TYPES, getMuType, isBishopric } from '@/types'
+import { ChevronDown, ChevronUp, Plus, X, CheckCircle, MessageSquare, Pencil } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -24,10 +24,9 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 2400) }
 
-  // ── PERSIST ───────────────────────────────────────────────
   const persist = useCallback(async (updated: Report, msg?: string) => {
     setSaving(true)
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('reports')
       .update({ data: updated.data, status: updated.status })
       .eq('id', updated.id)
@@ -42,12 +41,10 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
     }
   }, [supabase, onUpdate])
 
-  // ── PUBLISH / UNPUBLISH ───────────────────────────────────
   async function handlePublish() {
-    if (!confirm('¿Enviar este reporte al Consejo?\n\nEl obispado podrá verlo. Podrás revertirlo a borrador después.')) return
+    if (!confirm('¿Enviar este reporte al Obispado?\n\nEl obispado podrá verlo. Podrás revertirlo a borrador después.')) return
     const updated = { ...rep, status: 'published' as const }
-    await persist(updated, '📤 Reporte enviado al Consejo')
-    // Send notifications for member updates
+    await persist(updated, '📤 Reporte enviado al Obispado')
     const items = (updated.data.datos_miembros ?? []) as MemberUpdateItem[]
     for (const item of items) {
       await supabase.from('notifications').upsert({
@@ -72,10 +69,8 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
     await persist(rep, '💾 Borrador guardado')
   }
 
-  // ── ITEM OPERATIONS ───────────────────────────────────────
-  function getItems(sid: string): ReportItem[] {
-    return (rep.data as any)[sid] ?? []
-  }
+  function getItems(sid: string): ReportItem[] { return (rep.data as any)[sid] ?? [] }
+
   function setItems(sid: string, items: ReportItem[]) {
     const newData = { ...rep.data, [sid]: items }
     setRep(r => ({ ...r, data: newData }))
@@ -85,39 +80,33 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
   async function addItem(sid: string, title: string, body: string, pri: string) {
     if (!title.trim()) return
     const item: ReportItem = { id: 'i' + Date.now(), title: title.trim(), body, pri, ts: Date.now() }
-    const updated = setItems(sid, [...getItems(sid), item])
-    await persist(updated, '✓ Guardado')
+    await persist(setItems(sid, [...getItems(sid), item]), '✓ Guardado')
   }
 
   async function deleteItem(sid: string, id: string) {
     if (!confirm('¿Eliminar este item?')) return
-    const updated = setItems(sid, getItems(sid).filter(i => i.id !== id))
-    await persist(updated, '✓ Eliminado')
+    await persist(setItems(sid, getItems(sid).filter(i => i.id !== id)), '✓ Eliminado')
+  }
+
+  async function editItem(sid: string, id: string, title: string, body: string, pri: string) {
+    const items = getItems(sid).map(i => i.id === id ? { ...i, title, body, pri, resolution: undefined } : i)
+    const updated = setItems(sid, items as ReportItem[])
+    // Convert to draft when editing a resolved item
+    if (published) {
+      updated.status = 'draft'
+      setRep(r => ({ ...r, status: 'draft' }))
+    }
+    await persist(updated, '✏️ Asunto editado — reporte vuelto a borrador')
   }
 
   async function resolveItem(sid: string, id: string, note: string, byBishop: boolean) {
     const items = getItems(sid).map(i =>
       i.id === id ? { ...i, resolution: { note, by: profile.name, byBishop, ts: Date.now() } } : i
     )
-    const updated = setItems(sid, items)
-    await persist(updated, byBishop ? '✍️ Respuesta guardada' : '✅ Marcado como resuelto')
+    await persist(setItems(sid, items), byBishop ? '✍️ Respuesta guardada' : '✅ Marcado como resuelto')
   }
 
-  async function reopenItem(sid: string, id: string) {
-    if (!confirm('¿Reabrir este asunto?')) return
-    const items = getItems(sid).map(i => {
-      if (i.id !== id) return i
-      const { resolution, ...rest } = i as any
-      return rest
-    })
-    const updated = setItems(sid, items)
-    await persist(updated, '↩ Reabierto')
-  }
-
-  // ── MU OPERATIONS ─────────────────────────────────────────
-  function getMuItems(): MemberUpdateItem[] {
-    return (rep.data.datos_miembros ?? []) as MemberUpdateItem[]
-  }
+  function getMuItems(): MemberUpdateItem[] { return (rep.data.datos_miembros ?? []) as MemberUpdateItem[] }
 
   async function addMuItem(memberName: string, muType: string, fields: Record<string, string>) {
     if (!memberName.trim()) return
@@ -146,20 +135,7 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
     const newData = { ...rep.data, datos_miembros: items }
     const updated = { ...rep, data: newData }
     setRep(updated)
-    await persist(updated, '✅ Actualización marcada como completada')
-  }
-
-  async function reopenMuItem(id: string) {
-    if (!confirm('¿Reabrir esta actualización?')) return
-    const items = getMuItems().map(i => {
-      if (i.id !== id) return i
-      const { resolution, ...rest } = i as any
-      return rest
-    })
-    const newData = { ...rep.data, datos_miembros: items }
-    const updated = { ...rep, data: newData }
-    setRep(updated)
-    await persist(updated, '↩ Reabierto')
+    await persist(updated, '✅ Marcado como completado')
   }
 
   const toggleSec = (id: string) => {
@@ -176,15 +152,12 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
 
   return (
     <div>
-      {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#1a6b47] text-white px-5 py-3 rounded-full text-sm font-bold shadow-lg animate-fade-in">
+        <div className="fixed bottom-6 right-6 z-50 bg-[#1a6b47] text-white px-5 py-3 rounded-full text-sm font-bold shadow-lg">
           {toast}
         </div>
       )}
-
       <div className="card">
-        {/* Top bar */}
         <div className="flex items-center gap-3 mb-5 flex-wrap">
           <button onClick={onBack} className="btn btn-ghost btn-sm">← Volver</button>
           <div className="flex-1 min-w-0">
@@ -196,7 +169,6 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
           </span>
         </div>
 
-        {/* Status banner */}
         <div className={`flex items-center justify-between gap-3 p-3.5 rounded-xl border-[1.5px] mb-5 flex-wrap ${
           published ? 'bg-green-50 border-green-200 text-green-800' : 'bg-yellow-50 border-yellow-200 text-yellow-800'
         }`}>
@@ -215,35 +187,26 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
               <button onClick={handleUnpublish} disabled={saving} className="btn btn-ghost btn-sm">↩ Revertir a borrador</button>
             ) : (
               <button onClick={handlePublish} disabled={saving} className="btn btn-gold btn-sm">
-                {saving ? '...' : '📤 Enviar al Consejo'}
+                {saving ? '...' : '📤 Enviar al Obispado'}
               </button>
             )}
           </div>
         </div>
 
-        {/* Sections */}
         <div className="space-y-3">
           {SECTIONS.map(s => {
             const items = s.isMU ? getMuItems() : getItems(s.id)
             const count = items.length
             const isOpen = openSecs.has(s.id)
-
             return (
               <div key={s.id} className="border-[1.5px] border-[#ddd6c8] rounded-xl overflow-hidden">
-                <button
-                  onClick={() => toggleSec(s.id)}
-                  className="w-full flex items-center gap-3 p-4 bg-cream hover:bg-cream-dark transition-colors text-left"
-                >
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center text-lg flex-shrink-0" style={{ background: s.bg }}>
-                    {s.icon}
-                  </div>
+                <button onClick={() => toggleSec(s.id)} className="w-full flex items-center gap-3 p-4 bg-cream hover:bg-cream-dark transition-colors text-left">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center text-lg flex-shrink-0" style={{ background: s.bg }}>{s.icon}</div>
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-sm text-navy flex items-center flex-wrap gap-2">
                       {s.title}
                       {(s as any).secAlert && (
-                        <span className="text-[11px] font-bold bg-amber-100 text-amber-800 rounded-full px-2.5 py-0.5">
-                          🔔 Notifica al Secretario al publicar
-                        </span>
+                        <span className="text-[11px] font-bold bg-amber-100 text-amber-800 rounded-full px-2.5 py-0.5">🔔 Notifica al Secretario al publicar</span>
                       )}
                     </div>
                     <div className="text-xs text-gray-400 mt-0.5">{s.desc}</div>
@@ -253,17 +216,16 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
                   </span>
                   {isOpen ? <ChevronUp size={14} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />}
                 </button>
-
                 {isOpen && (
                   <div className="p-4 border-t border-[#ddd6c8]">
                     {(s as any).secAlert && (
                       <div className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 font-medium mb-4">
-                        🔔 Al publicar el reporte, el Secretario recibirá una notificación por cada actualización registrada aquí.
+                        🔔 Al publicar, el Secretario recibirá una notificación por cada actualización registrada aquí.
                       </div>
                     )}
                     {s.isMU
-                      ? <MUSection items={getMuItems()} profile={profile} published={published} onAdd={addMuItem} onDelete={deleteMuItem} onResolve={resolveMuItem} onReopen={reopenMuItem} />
-                      : <ItemSection sid={s.id} sec={s as any} items={getItems(s.id)} profile={profile} published={published} onAdd={addItem} onDelete={deleteItem} onResolve={resolveItem} onReopen={reopenItem} />
+                      ? <MUSection items={getMuItems()} profile={profile} published={published} onAdd={addMuItem} onDelete={deleteMuItem} onResolve={resolveMuItem} />
+                      : <ItemSection sid={s.id} sec={s as any} items={getItems(s.id)} profile={profile} published={published} onAdd={addItem} onDelete={deleteItem} onEdit={editItem} onResolve={resolveItem} />
                     }
                   </div>
                 )}
@@ -276,8 +238,7 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
   )
 }
 
-// ── ITEM SECTION ──────────────────────────────────────────────
-function ItemSection({ sid, sec, items, profile, published, onAdd, onDelete, onResolve, onReopen }: any) {
+function ItemSection({ sid, sec, items, profile, published, onAdd, onDelete, onEdit, onResolve }: any) {
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -285,11 +246,27 @@ function ItemSection({ sid, sec, items, profile, published, onAdd, onDelete, onR
   const [showRfw, setShowRfw] = useState<string | null>(null)
   const [rfwNote, setRfwNote] = useState('')
   const [rfwMode, setRfwMode] = useState<'resolve' | 'reply'>('resolve')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editBody, setEditBody] = useState('')
+  const [editPri, setEditPri] = useState('')
   const isBish = isBishopric(profile.role)
 
   async function submit() {
     await onAdd(sid, title, body, pri)
     setTitle(''); setBody(''); setShowForm(false)
+  }
+
+  function startEdit(it: ReportItem) {
+    setEditingId(it.id)
+    setEditTitle(it.title)
+    setEditBody(it.body ?? '')
+    setEditPri(it.pri)
+  }
+
+  async function submitEdit(it: ReportItem) {
+    await onEdit(sid, it.id, editTitle, editBody, editPri)
+    setEditingId(null)
   }
 
   return (
@@ -300,65 +277,86 @@ function ItemSection({ sid, sec, items, profile, published, onAdd, onDelete, onR
       {items.map((it: ReportItem) => {
         const resolved = !!it.resolution
         const canReply = sec.isObisp && isBish && !resolved && published
-        const canResolve = !resolved && published && (isBish || true)
+        const canResolve = !resolved && published
         const pc = priColor(it.pri)
+        const isEditing = editingId === it.id
+
         return (
-          <div
-            key={it.id}
-            className={`rounded-xl p-4 mb-2.5 border-l-[3px] ${resolved ? 'opacity-60 bg-gray-50 border-l-gray-300' : ''}`}
-            style={!resolved ? { background: sec.bg, borderLeftColor: sec.color } : {}}
-          >
-            <div className="flex items-start justify-between gap-2 mb-1.5">
-              <p className={`font-bold text-sm leading-snug ${resolved ? 'line-through text-gray-400' : ''}`}>{it.title}</p>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                {resolved && <span className="text-[10px] font-bold bg-gray-100 text-gray-500 rounded-full px-2 py-0.5">✓ Cerrado</span>}
-                <button onClick={() => onDelete(sid, it.id)} className="text-gray-300 hover:text-red-500 transition-colors"><X size={14} /></button>
-              </div>
-            </div>
-            {it.body && <p className="text-sm text-gray-600 leading-relaxed mb-2">{it.body}</p>}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full" style={{ background: pc.bg, color: pc.c }}>{it.pri}</span>
-              {it.ts && <span className="text-[11px] text-gray-400">{format(new Date(it.ts), 'HH:mm')}</span>}
-            </div>
-            {resolved && it.resolution && (
-              <div className={`mt-3 p-3 rounded-lg ${it.resolution.byBishop ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
-                <p className={`text-[11px] font-bold mb-1 ${it.resolution.byBishop ? 'text-amber-700' : 'text-green-700'}`}>
-                  {it.resolution.byBishop ? '✍️ Respuesta del Obispo' : '✅ Resuelto'} · {it.resolution.by} · {format(new Date(it.resolution.ts), 'HH:mm')}
-                </p>
-                {it.resolution.note && <p className="text-sm text-gray-600">{it.resolution.note}</p>}
-              </div>
-            )}
-            {resolved ? (
-              <button onClick={() => onReopen(sid, it.id)} className="mt-2 text-xs text-gray-400 hover:text-navy border border-gray-200 rounded-md px-2.5 py-1 transition-colors">↩ Reabrir</button>
-            ) : (
-              <div className="flex gap-2 mt-3 flex-wrap">
-                {canReply && (
-                  <button onClick={() => { setShowRfw(it.id); setRfwMode('reply'); setRfwNote('') }} className="btn btn-gold btn-sm">
-                    <MessageSquare size={12} /> Responder
-                  </button>
-                )}
-                {canResolve && (
-                  <button onClick={() => { setShowRfw(it.id); setRfwMode('resolve'); setRfwNote('') }} className="btn btn-green btn-sm">
-                    <CheckCircle size={12} /> Marcar resuelto
-                  </button>
-                )}
-              </div>
-            )}
-            {showRfw === it.id && (
-              <div className="mt-3 p-3.5 bg-blue-50 border border-blue-200 rounded-xl">
-                <label className="label">{rfwMode === 'reply' ? 'Respuesta del Obispo' : 'Nota de resolución (opcional)'}</label>
-                <textarea
-                  className="input min-h-[64px] resize-none"
-                  placeholder="Escribe una respuesta, acción tomada o nota..."
-                  value={rfwNote}
-                  onChange={e => setRfwNote(e.target.value)}
-                  autoFocus
-                />
-                <div className="flex gap-2 mt-2">
-                  <button className="btn btn-navy btn-sm" onClick={async () => { await onResolve(sid, it.id, rfwNote, rfwMode === 'reply'); setShowRfw(null) }}>Confirmar</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setShowRfw(null)}>Cancelar</button>
+          <div key={it.id} className={`rounded-xl p-4 mb-2.5 border-l-[3px] ${resolved ? 'opacity-60 bg-gray-50 border-l-gray-300' : ''}`}
+            style={!resolved ? { background: sec.bg, borderLeftColor: sec.color } : {}}>
+
+            {isEditing ? (
+              <div className="space-y-2.5">
+                <div>
+                  <label className="label">Título</label>
+                  <input className="input text-sm" value={editTitle} onChange={e => setEditTitle(e.target.value)} autoFocus />
                 </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label">{sec.pLabel}</label>
+                    <select className="input text-sm" value={editPri} onChange={e => setEditPri(e.target.value)}>
+                      {sec.pOpts.map((o: string) => <option key={o}>{o}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Detalles</label>
+                  <textarea className="input text-sm min-h-[60px] resize-none" value={editBody} onChange={e => setEditBody(e.target.value)} />
+                </div>
+                <div className="flex gap-2">
+                  <button className="btn btn-navy btn-sm" onClick={() => submitEdit(it)} disabled={!editTitle.trim()}>💾 Guardar cambios</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditingId(null)}>Cancelar</button>
+                </div>
+                {published && <p className="text-xs text-amber-600 font-medium">⚠️ Al guardar, el reporte volverá a borrador y deberás enviarlo al Obispado de nuevo.</p>}
               </div>
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <p className={`font-bold text-sm leading-snug ${resolved ? 'line-through text-gray-400' : ''}`}>{it.title}</p>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {resolved && <span className="text-[10px] font-bold bg-gray-100 text-gray-500 rounded-full px-2 py-0.5">✓ Cerrado</span>}
+                    <button onClick={() => startEdit(it)} className="text-gray-300 hover:text-navy transition-colors" title="Editar asunto"><Pencil size={13} /></button>
+                    <button onClick={() => onDelete(sid, it.id)} className="text-gray-300 hover:text-red-500 transition-colors" title="Eliminar"><X size={14} /></button>
+                  </div>
+                </div>
+                {it.body && <p className="text-sm text-gray-600 leading-relaxed mb-2">{it.body}</p>}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full" style={{ background: pc.bg, color: pc.c }}>{it.pri}</span>
+                  {it.ts && <span className="text-[11px] text-gray-400">{format(new Date(it.ts), 'HH:mm')}</span>}
+                </div>
+                {resolved && it.resolution && (
+                  <div className={`mt-3 p-3 rounded-lg ${it.resolution.byBishop ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
+                    <p className={`text-[11px] font-bold mb-1 ${it.resolution.byBishop ? 'text-amber-700' : 'text-green-700'}`}>
+                      {it.resolution.byBishop ? '✍️ Respuesta del Obispo' : '✅ Resuelto'} · {it.resolution.by} · {format(new Date(it.resolution.ts), 'HH:mm')}
+                    </p>
+                    {it.resolution.note && <p className="text-sm text-gray-600">{it.resolution.note}</p>}
+                  </div>
+                )}
+                {!resolved && (canReply || canResolve) && (
+                  <div className="flex gap-2 mt-3 flex-wrap">
+                    {canReply && (
+                      <button onClick={() => { setShowRfw(it.id); setRfwMode('reply'); setRfwNote('') }} className="btn btn-gold btn-sm">
+                        <MessageSquare size={12} /> Responder
+                      </button>
+                    )}
+                    {canResolve && (
+                      <button onClick={() => { setShowRfw(it.id); setRfwMode('resolve'); setRfwNote('') }} className="btn btn-green btn-sm">
+                        <CheckCircle size={12} /> Marcar resuelto
+                      </button>
+                    )}
+                  </div>
+                )}
+                {showRfw === it.id && (
+                  <div className="mt-3 p-3.5 bg-blue-50 border border-blue-200 rounded-xl">
+                    <label className="label">{rfwMode === 'reply' ? 'Respuesta del Obispo' : 'Nota de resolución (opcional)'}</label>
+                    <textarea className="input min-h-[64px] resize-none" placeholder="Escribe una respuesta, acción tomada o nota..." value={rfwNote} onChange={e => setRfwNote(e.target.value)} autoFocus />
+                    <div className="flex gap-2 mt-2">
+                      <button className="btn btn-navy btn-sm" onClick={async () => { await onResolve(sid, it.id, rfwNote, rfwMode === 'reply'); setShowRfw(null) }}>Confirmar</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setShowRfw(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )
@@ -388,16 +386,13 @@ function ItemSection({ sid, sec, items, profile, published, onAdd, onDelete, onR
           </div>
         </div>
       ) : (
-        <button onClick={() => setShowForm(true)} className="btn btn-ghost btn-sm mt-1">
-          <Plus size={13} /> Añadir
-        </button>
+        <button onClick={() => setShowForm(true)} className="btn btn-ghost btn-sm mt-1"><Plus size={13} /> Añadir</button>
       )}
     </div>
   )
 }
 
-// ── MU SECTION ────────────────────────────────────────────────
-function MUSection({ items, profile, published, onAdd, onDelete, onResolve, onReopen }: any) {
+function MUSection({ items, profile, published, onAdd, onDelete, onResolve }: any) {
   const [showForm, setShowForm] = useState(false)
   const [muName, setMuName] = useState('')
   const [muType, setMuType] = useState('new')
@@ -446,12 +441,9 @@ function MUSection({ items, profile, published, onAdd, onDelete, onResolve, onRe
               ))}
             </div>
             {done ? (
-              <div className="mt-3">
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-[11px] font-bold text-green-700 mb-1">✅ Actualizado en registros · {it.resolution!.by} · {format(new Date(it.resolution!.ts), 'HH:mm')}</p>
-                  {it.resolution!.note && <p className="text-sm text-gray-600">{it.resolution!.note}</p>}
-                </div>
-                <button onClick={() => onReopen(it.id)} className="mt-2 text-xs text-gray-400 hover:text-navy border border-gray-200 rounded-md px-2.5 py-1 transition-colors">↩ Reabrir</button>
+              <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-[11px] font-bold text-green-700 mb-1">✅ Actualizado en registros · {it.resolution!.by}</p>
+                {it.resolution!.note && <p className="text-sm text-gray-600">{it.resolution!.note}</p>}
               </div>
             ) : it.readBySec ? (
               <div className="mt-3">
@@ -466,7 +458,7 @@ function MUSection({ items, profile, published, onAdd, onDelete, onResolve, onRe
                 {showRfw === it.id && (
                   <div className="mt-3 p-3.5 bg-blue-50 border border-blue-200 rounded-xl">
                     <label className="label">Nota de confirmación (opcional)</label>
-                    <textarea className="input min-h-[60px] resize-none" placeholder="Ej: Datos actualizados en Leader and Clerk Resources..." value={rfwNote} onChange={e => setRfwNote(e.target.value)} autoFocus />
+                    <textarea className="input min-h-[60px] resize-none" value={rfwNote} onChange={e => setRfwNote(e.target.value)} autoFocus />
                     <div className="flex gap-2 mt-2">
                       <button className="btn btn-navy btn-sm" onClick={async () => { await onResolve(it.id, rfwNote); setShowRfw(null) }}>Confirmar</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => setShowRfw(null)}>Cancelar</button>
@@ -511,9 +503,7 @@ function MUSection({ items, profile, published, onAdd, onDelete, onResolve, onRe
           </div>
         </div>
       ) : (
-        <button onClick={() => setShowForm(true)} className="btn btn-ghost btn-sm mt-1">
-          <Plus size={13} /> Añadir
-        </button>
+        <button onClick={() => setShowForm(true)} className="btn btn-ghost btn-sm mt-1"><Plus size={13} /> Añadir</button>
       )}
     </div>
   )
