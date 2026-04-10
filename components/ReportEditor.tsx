@@ -277,7 +277,7 @@ function ItemSection({ sid, sec, items, profile, published, onAdd, onDelete, onE
       {items.map((it: ReportItem) => {
         const resolved = !!it.resolution
         const canReply = sec.isObisp && isBish && !resolved && published
-        const canResolve = !resolved && published
+        const canResolve = !resolved && published && isBish
         const pc = priColor(it.pri)
         const isEditing = editingId === it.id
 
