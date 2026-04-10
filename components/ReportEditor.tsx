@@ -238,7 +238,7 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
   )
 }
 
-function ItemSection({ sid, sec, items, profile, published, onAdd, onDelete, onEdit, onResolve }: any) {
+function ItemSection({ sid, sec, items, profile, published, isBish, onAdd, onDelete, onEdit, onResolve }: any) {
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
