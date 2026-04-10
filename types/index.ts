@@ -33,6 +33,7 @@ export const ORGS = [
   { id: 'mj', name: 'Mujeres Jóvenes', color: '#0891b2', roles: ['pres_mj','c1_mj','c2_mj','sec_mj'] },
   { id: 'sa', name: 'Sacerdocio Aarónico', color: '#059669', roles: ['ayud_pr','pres_ma','pres_di'] },
   { id: 'pm', name: 'Primaria', color: '#d97706', roles: ['pres_pm','c1_pm','sec_pm'] },
+  { id: 'ed', name: 'Escuela Dominical', color: '#be185d', roles: ['pres_ed','c1_ed','sec_ed'] },
 ] as const
 
 export function getOrg(role: string) {
