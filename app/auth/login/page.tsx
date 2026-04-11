@@ -11,6 +11,7 @@ const ALL_ROLES = [
   { group: 'Mujeres Jóvenes', roles: ['pres_mj','c1_mj','c2_mj','sec_mj'] },
   { group: 'Sacerdocio Aarónico', roles: ['ayud_pr','pres_ma','pres_di'] },
   { group: 'Primaria', roles: ['pres_pm','c1_pm','sec_pm'] },
+  { group: 'Escuela Dominical', roles: ['pres_ed','c1_ed','sec_ed'] },
 ]
 
 export default function AuthPage() {
@@ -20,11 +21,8 @@ export default function AuthPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  // Login
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-
-  // Register
   const [name, setName] = useState('')
   const [regEmail, setRegEmail] = useState('')
   const [regPassword, setRegPassword] = useState('')
@@ -34,7 +32,7 @@ export default function AuthPage() {
     e.preventDefault()
     setLoading(true); setError('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) { setError(error.message); setLoading(false); return }
+    if (error) { setError('Correo o contraseña incorrectos.'); setLoading(false); return }
     router.push('/dashboard')
     router.refresh()
   }
@@ -52,9 +50,7 @@ export default function AuthPage() {
     })
     if (signUpError) { setError(signUpError.message); setLoading(false); return }
     if (data.user) {
-      await supabase.from('profiles').upsert({
-        id: data.user.id, name, role, org_id: org.id
-      })
+      await supabase.from('profiles').upsert({ id: data.user.id, name, role, org_id: org.id })
       router.push('/dashboard')
       router.refresh()
     }
@@ -62,74 +58,75 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-navy to-[#2a4d9e] p-4 relative overflow-hidden">
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-gold/20 blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-64 h-64 rounded-full bg-gold/10 blur-3xl" />
-      </div>
-
-      <div className="bg-white rounded-2xl p-10 w-full max-w-md relative z-10 shadow-2xl">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+      <div className="w-full max-w-md">
+        {/* Header */}
         <div className="text-center mb-8">
-          <div className="text-4xl text-gold mb-3">✝</div>
-          <h1 className="font-serif text-2xl text-navy font-semibold leading-tight">Consejo de Barrio</h1>
-          <p className="text-xs text-gray-400 mt-1">La Iglesia de Jesucristo de los Santos de los Últimos Días</p>
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-slate-800 rounded-2xl mb-4 shadow-lg">
+            <span className="text-2xl">📋</span>
+          </div>
+          <h1 className="font-serif text-2xl text-slate-800 font-semibold">Consejo de Barrio</h1>
+          <p className="text-sm text-slate-400 mt-1">La Iglesia de Jesucristo de los Santos de los Últimos Días</p>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-5">{error}</div>
-        )}
+        {/* Card */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-5">{error}</div>
+          )}
 
-        {mode === 'login' ? (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="label">Correo electrónico</label>
-              <input className="input" type="email" placeholder="tu@correo.com" value={email} onChange={e => setEmail(e.target.value)} required />
-            </div>
-            <div>
-              <label className="label">Contraseña</label>
-              <input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
-            </div>
-            <button className="btn btn-navy w-full justify-center py-3 text-base mt-2" type="submit" disabled={loading}>
-              {loading ? 'Ingresando...' : 'Ingresar'}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div>
-              <label className="label">Nombre completo</label>
-              <input className="input" type="text" placeholder="Ej: Hermana Martínez" value={name} onChange={e => setName(e.target.value)} required />
-            </div>
-            <div>
-              <label className="label">Correo</label>
-              <input className="input" type="email" placeholder="tu@correo.com" value={regEmail} onChange={e => setRegEmail(e.target.value)} required />
-            </div>
-            <div>
-              <label className="label">Contraseña</label>
-              <input className="input" type="password" placeholder="Mínimo 6 caracteres" value={regPassword} onChange={e => setRegPassword(e.target.value)} required />
-            </div>
-            <div>
-              <label className="label">Llamamiento</label>
-              <select className="input" value={role} onChange={e => setRole(e.target.value)} required>
-                <option value="">— Selecciona tu llamamiento —</option>
-                {ALL_ROLES.map(g => (
-                  <optgroup key={g.group} label={g.group}>
-                    {g.roles.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-            <button className="btn btn-navy w-full justify-center py-3 text-base mt-2" type="submit" disabled={loading}>
-              {loading ? 'Creando cuenta...' : 'Crear cuenta'}
-            </button>
-          </form>
-        )}
+          {mode === 'login' ? (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="label">Correo electrónico</label>
+                <input className="input" type="email" placeholder="tu@correo.com" value={email} onChange={e => setEmail(e.target.value)} required />
+              </div>
+              <div>
+                <label className="label">Contraseña</label>
+                <input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
+              </div>
+              <button className="btn btn-navy w-full justify-center py-3 text-sm mt-2" type="submit" disabled={loading}>
+                {loading ? 'Ingresando...' : 'Ingresar'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-4">
+              <div>
+                <label className="label">Nombre completo</label>
+                <input className="input" type="text" placeholder="Ej: Hermana Martínez" value={name} onChange={e => setName(e.target.value)} required />
+              </div>
+              <div>
+                <label className="label">Correo</label>
+                <input className="input" type="email" placeholder="tu@correo.com" value={regEmail} onChange={e => setRegEmail(e.target.value)} required />
+              </div>
+              <div>
+                <label className="label">Contraseña</label>
+                <input className="input" type="password" placeholder="Mínimo 6 caracteres" value={regPassword} onChange={e => setRegPassword(e.target.value)} required />
+              </div>
+              <div>
+                <label className="label">Llamamiento</label>
+                <select className="input" value={role} onChange={e => setRole(e.target.value)} required>
+                  <option value="">— Selecciona tu llamamiento —</option>
+                  {ALL_ROLES.map(g => (
+                    <optgroup key={g.group} label={g.group}>
+                      {g.roles.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <button className="btn btn-navy w-full justify-center py-3 text-sm mt-2" type="submit" disabled={loading}>
+                {loading ? 'Creando cuenta...' : 'Crear cuenta'}
+              </button>
+            </form>
+          )}
 
-        <p className="text-center text-sm text-gray-400 mt-6">
-          {mode === 'login' ? '¿Sin cuenta? ' : '¿Ya tienes cuenta? '}
-          <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }} className="text-gold font-bold hover:underline">
-            {mode === 'login' ? 'Regístrate aquí' : 'Inicia sesión'}
-          </button>
-        </p>
+          <p className="text-center text-sm text-slate-400 mt-6">
+            {mode === 'login' ? '¿Sin cuenta? ' : '¿Ya tienes cuenta? '}
+            <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }} className="text-slate-700 font-semibold hover:underline">
+              {mode === 'login' ? 'Regístrate aquí' : 'Inicia sesión'}
+            </button>
+          </p>
+        </div>
       </div>
     </div>
   )

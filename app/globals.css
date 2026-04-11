@@ -1,23 +1,59 @@
-@import url('https://fonts.googleapis.com/css2?family=Lora:wght@500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Lora:wght@500;600&family=Inter:wght@300;400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  body { @apply bg-cream text-[#1a1a2e]; }
+  body {
+    @apply bg-slate-50 text-slate-800;
+    font-family: 'Inter', sans-serif;
+  }
 }
 
 @layer components {
-  .btn { @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer transition-all duration-150 border-none; }
+  .btn {
+    @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all duration-150 border-none;
+  }
   .btn-sm { @apply px-3 py-1.5 text-xs rounded-md; }
-  .btn-navy { @apply bg-navy text-white hover:bg-navy-light; }
-  .btn-gold { @apply bg-gold text-white hover:bg-gold-light; }
-  .btn-green { @apply bg-[#1a6b47] text-white hover:opacity-90; }
-  .btn-ghost { @apply bg-transparent border border-[#ddd6c8] text-[#1a1a2e] hover:border-navy hover:text-navy; }
-  .card { @apply bg-white rounded-xl shadow-sm border border-[#ddd6c8] p-6; }
-  .input { @apply w-full px-3 py-2.5 border-[1.5px] border-[#ddd6c8] rounded-lg text-sm font-sans text-[#1a1a2e] bg-cream transition-colors focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/10; }
-  .label { @apply block text-[11px] font-bold uppercase tracking-wider text-[#6b7280] mb-1; }
-  .sec-pill { @apply text-[11px] font-bold rounded-full px-2.5 py-0.5 whitespace-nowrap; }
-  .status-draft { @apply bg-yellow-100 text-yellow-800; }
-  .status-published { @apply bg-green-100 text-green-800; }
+  .btn-navy { @apply bg-slate-800 text-white hover:bg-slate-700; }
+  .btn-gold { @apply bg-amber-600 text-white hover:bg-amber-700; }
+  .btn-green { @apply bg-emerald-700 text-white hover:bg-emerald-800; }
+  .btn-ghost {
+    @apply bg-transparent border border-slate-200 text-slate-600 hover:border-slate-400 hover:text-slate-800;
+  }
+  .btn-danger { @apply bg-red-600 text-white hover:bg-red-700; }
+
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-slate-100 p-6;
+  }
+
+  .input {
+    @apply w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-800 bg-white transition-colors
+    focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .label {
+    @apply block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1;
+  }
+
+  .sec-pill {
+    @apply text-[11px] font-semibold rounded-full px-2.5 py-0.5 whitespace-nowrap;
+  }
+  .status-draft { @apply bg-amber-50 text-amber-700 border border-amber-200; }
+  .status-published { @apply bg-emerald-50 text-emerald-700 border border-emerald-200; }
+
+  /* Action buttons — visible on any background */
+  .icon-btn {
+    @apply w-8 h-8 rounded-lg flex items-center justify-center transition-colors flex-shrink-0;
+  }
+  .icon-btn-edit {
+    @apply icon-btn bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700;
+  }
+  .icon-btn-delete {
+    @apply icon-btn bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600;
+  }
+  .icon-btn-check {
+    @apply icon-btn bg-emerald-50 text-emerald-500 hover:bg-emerald-100 hover:text-emerald-700;
+  }
 }

@@ -4,7 +4,7 @@ export const ROLE_LABELS: Record<string, string> = {
   obispo: 'Obispo',
   c1_ob: '1er Consejero del Obispo',
   c2_ob: '2do Consejero del Obispo',
-  sec_ej: 'Secretario Ejecutivo',
+  sec_ej: 'Secretario Auxiliar',
   sec_ba: 'Secretario de Barrio',
   pres_cu: 'Pte. Cuórum de Élderes',
   c1_cu: '1er Consejero - C.É.',
@@ -18,7 +18,7 @@ export const ROLE_LABELS: Record<string, string> = {
   c1_mj: '1ra Consejera - M.J.',
   c2_mj: '2da Consejera - M.J.',
   sec_mj: 'Secretaria - M.J.',
-  ayud_pr: 'Ayudante Obispo - Presbíteros',
+  ayud_pr: 'Ayudante Obispo - Presb.',
   pres_ma: 'Pte. C. Maestros',
   pres_di: 'Pte. C. Diáconos',
   pres_pm: 'Presidenta Primaria',
@@ -30,13 +30,13 @@ export const ROLE_LABELS: Record<string, string> = {
 }
 
 export const ORGS = [
-  { id: 'ob', name: 'Obispado', color: '#1c2b4a', roles: ['obispo','c1_ob','c2_ob','sec_ej','sec_ba'] },
-  { id: 'cu', name: 'Cuórum de Élderes', color: '#2563eb', roles: ['pres_cu','c1_cu','c2_cu','sec_cu'] },
-  { id: 'sr', name: 'Sociedad de Socorro', color: '#7c3aed', roles: ['pres_sr','c1_sr','c2_sr','sec_sr'] },
-  { id: 'mj', name: 'Mujeres Jóvenes', color: '#0891b2', roles: ['pres_mj','c1_mj','c2_mj','sec_mj'] },
-  { id: 'sa', name: 'Sacerdocio Aarónico', color: '#059669', roles: ['ayud_pr','pres_ma','pres_di'] },
-  { id: 'pm', name: 'Primaria', color: '#d97706', roles: ['pres_pm','c1_pm','sec_pm'] },
-  { id: 'ed', name: 'Escuela Dominical', color: '#be185d', roles: ['pres_ed','c1_ed','sec_ed'] },
+  { id: 'ob', name: 'Obispado', color: '#374151', roles: ['obispo','c1_ob','c2_ob','sec_ej','sec_ba'] },
+  { id: 'cu', name: 'Cuórum de Élderes', color: '#1d4ed8', roles: ['pres_cu','c1_cu','c2_cu','sec_cu'] },
+  { id: 'sr', name: 'Sociedad de Socorro', color: '#6d28d9', roles: ['pres_sr','c1_sr','c2_sr','sec_sr'] },
+  { id: 'mj', name: 'Mujeres Jóvenes', color: '#0369a1', roles: ['pres_mj','c1_mj','c2_mj','sec_mj'] },
+  { id: 'sa', name: 'Sacerdocio Aarónico', color: '#065f46', roles: ['ayud_pr','pres_ma','pres_di'] },
+  { id: 'pm', name: 'Primaria', color: '#92400e', roles: ['pres_pm','c1_pm','sec_pm'] },
+  { id: 'ed', name: 'Escuela Dominical', color: '#9f1239', roles: ['pres_ed','c1_ed','sec_ed'] },
 ] as const
 
 export function getOrg(role: string) {
@@ -52,7 +52,7 @@ export function isBishopric(role: string) {
 export const SECTIONS = [
   {
     id: 'urgentes', icon: '🚨', title: 'Asuntos Urgentes / Importantes',
-    color: '#ef4444', bg: '#fef2f2',
+    color: '#dc2626', bg: '#fef2f2',
     desc: 'Situaciones urgentes o importantes que requieren atención del obispado.',
     pLabel: 'Nivel', pOpts: ['🔴 Urgente','🟡 Importante','🔵 Para información'],
     isMU: false, isObisp: false,
@@ -66,28 +66,28 @@ export const SECTIONS = [
   },
   {
     id: 'datos_miembros', icon: '📋', title: 'Actualizaciones de Datos de Miembros',
-    color: '#0891b2', bg: '#ecfeff',
-    desc: 'Mudanzas, cambios de teléfono, dirección, nombre. Se notifica al Secretario al publicar.',
+    color: '#0369a1', bg: '#f0f9ff',
+    desc: 'Mudanzas, cambios de teléfono, dirección, nombre.',
     pLabel: '', pOpts: [],
-    isMU: true, isObisp: false, secAlert: true,
+    isMU: true, isObisp: false,
   },
   {
     id: 'preguntas_obispo', icon: '💬', title: 'Preguntas / Solicitudes para el Obispo',
-    color: '#d97706', bg: '#fffbeb',
+    color: '#b45309', bg: '#fffbeb',
     desc: 'Preguntas, solicitudes de recursos, aprobaciones.',
     pLabel: 'Tipo', pOpts: ['Pregunta','Solicitud de recursos','Aprobación','Orientación'],
     isMU: false, isObisp: true,
   },
   {
     id: 'actividades', icon: '📣', title: 'Actividades y Eventos',
-    color: '#16a34a', bg: '#f0fdf4',
+    color: '#15803d', bg: '#f0fdf4',
     desc: 'Actividades planeadas, anuncios o novedades.',
     pLabel: 'Tipo', pOpts: ['Actividad planeada','Anuncio','Logro','Actualización de programa'],
     isMU: false, isObisp: false,
   },
   {
     id: 'generales', icon: '🗂', title: 'Actualizaciones Generales',
-    color: '#6366f1', bg: '#eef2ff',
+    color: '#4338ca', bg: '#eef2ff',
     desc: 'Logros, necesidades de materiales, informe de asistencia, coordinación entre organizaciones.',
     pLabel: 'Categoría', pOpts: ['Logro / Reconocimiento','Necesidad de materiales','Informe de asistencia','Coordinación entre organizaciones','Otro'],
     isMU: false, isObisp: false,
@@ -97,18 +97,42 @@ export const SECTIONS = [
 // ── MEMBER UPDATE TYPES ───────────────────────────────────────
 
 export const MU_TYPES = [
-  { id: 'new', label: 'Se mudó al barrio', cls: 'new', cardColor: '#f0fdf4', borderColor: '#86efac',
-    fields: [{id:'phone',label:'Teléfono'},{id:'address',label:'Dirección'},{id:'notes',label:'Notas'}] },
-  { id: 'out', label: 'Se mudó del barrio', cls: 'out', cardColor: '#fef2f2', borderColor: '#fca5a5',
-    fields: [{id:'destination',label:'¿A dónde se fue?'},{id:'notes',label:'Notas'}] },
-  { id: 'phone', label: 'Cambio de teléfono / correo', cls: 'info', cardColor: '#eff6ff', borderColor: '#93c5fd',
-    fields: [{id:'old_val',label:'Datos anteriores'},{id:'new_val',label:'Datos nuevos'},{id:'notes',label:'Notas'}] },
-  { id: 'address', label: 'Cambio de dirección', cls: 'info', cardColor: '#eff6ff', borderColor: '#93c5fd',
-    fields: [{id:'old_addr',label:'Dirección anterior'},{id:'new_addr',label:'Dirección nueva'},{id:'notes',label:'Notas'}] },
-  { id: 'name', label: 'Matrimonio / Nuevo apellido', cls: 'event', cardColor: '#f5f3ff', borderColor: '#d8b4fe',
-    fields: [{id:'old_name',label:'Nombre anterior'},{id:'new_name',label:'Nombre nuevo'},{id:'notes',label:'Notas'}] },
-  { id: 'death', label: 'Fallecimiento', cls: 'death', cardColor: '#f8fafc', borderColor: '#cbd5e1',
-    fields: [{id:'date',label:'Fecha de fallecimiento'},{id:'notes',label:'Notas adicionales'}] },
+  {
+    id: 'new', label: 'Se mudó al barrio', cls: 'new',
+    cardColor: '#f8fafc', borderColor: '#cbd5e1',
+    fields: [
+      {id:'phone',label:'Teléfono'},
+      {id:'address',label:'Dirección'},
+      {id:'cedula',label:'Número de cédula'},
+      {id:'birthdate',label:'Fecha de nacimiento'},
+      {id:'notes',label:'Notas'},
+    ]
+  },
+  {
+    id: 'out', label: 'Se mudó del barrio', cls: 'out',
+    cardColor: '#f8fafc', borderColor: '#cbd5e1',
+    fields: [{id:'destination',label:'¿A dónde se fue?'},{id:'notes',label:'Notas'}]
+  },
+  {
+    id: 'phone', label: 'Cambio de teléfono / correo', cls: 'info',
+    cardColor: '#f8fafc', borderColor: '#cbd5e1',
+    fields: [{id:'old_val',label:'Datos anteriores'},{id:'new_val',label:'Datos nuevos'},{id:'notes',label:'Notas'}]
+  },
+  {
+    id: 'address', label: 'Cambio de dirección', cls: 'info',
+    cardColor: '#f8fafc', borderColor: '#cbd5e1',
+    fields: [{id:'old_addr',label:'Dirección anterior'},{id:'new_addr',label:'Dirección nueva'},{id:'notes',label:'Notas'}]
+  },
+  {
+    id: 'name', label: 'Matrimonio / Nuevo apellido', cls: 'event',
+    cardColor: '#f8fafc', borderColor: '#cbd5e1',
+    fields: [{id:'old_name',label:'Nombre anterior'},{id:'new_name',label:'Nombre nuevo'},{id:'notes',label:'Notas'}]
+  },
+  {
+    id: 'death', label: 'Fallecimiento', cls: 'death',
+    cardColor: '#f8fafc', borderColor: '#cbd5e1',
+    fields: [{id:'date',label:'Fecha de fallecimiento'},{id:'notes',label:'Notas adicionales'}]
+  },
 ] as const
 
 export function getMuType(id: string) {

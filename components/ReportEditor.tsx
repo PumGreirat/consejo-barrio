@@ -45,19 +45,6 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
     if (!confirm('¿Enviar este reporte al Obispado?\n\nEl obispado podrá verlo. Podrás revertirlo a borrador después.')) return
     const updated = { ...rep, status: 'published' as const }
     await persist(updated, '📤 Reporte enviado al Obispado')
-    const items = (updated.data.datos_miembros ?? []) as MemberUpdateItem[]
-    for (const item of items) {
-      await supabase.from('notifications').upsert({
-        member_item_id: item.id,
-        member_name: item.memberName,
-        mu_type: item.muType,
-        type_label: getMuType(item.muType).label,
-        fields: item.fields,
-        reported_by: profile.name,
-        reported_by_org: item.reportedByOrg,
-        is_read: false,
-      }, { onConflict: 'member_item_id', ignoreDuplicates: true })
-    }
   }
 
   async function handleUnpublish() {
@@ -65,12 +52,9 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
     await persist({ ...rep, status: 'draft' }, '↩ Revertido a borrador')
   }
 
-  async function handleSaveDraft() {
-    await persist(rep, '💾 Borrador guardado')
-  }
+  async function handleSaveDraft() { await persist(rep, '💾 Borrador guardado') }
 
   function getItems(sid: string): ReportItem[] { return (rep.data as any)[sid] ?? [] }
-
   function setItems(sid: string, items: ReportItem[]) {
     const newData = { ...rep.data, [sid]: items }
     setRep(r => ({ ...r, data: newData }))
@@ -91,12 +75,8 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
   async function editItem(sid: string, id: string, title: string, body: string, pri: string) {
     const items = getItems(sid).map(i => i.id === id ? { ...i, title, body, pri, resolution: undefined } : i)
     const updated = setItems(sid, items as ReportItem[])
-    // Convert to draft when editing a resolved item
-    if (published) {
-      updated.status = 'draft'
-      setRep(r => ({ ...r, status: 'draft' }))
-    }
-    await persist(updated, '✏️ Asunto editado — reporte vuelto a borrador')
+    if (published) { updated.status = 'draft'; setRep(r => ({ ...r, status: 'draft' })) }
+    await persist(updated, '✏️ Asunto editado')
   }
 
   async function resolveItem(sid: string, id: string, note: string, byBishop: boolean) {
@@ -120,6 +100,16 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
     await persist(updated, '✓ Guardado')
   }
 
+  async function editMuItem(id: string, memberName: string, muType: string, fields: Record<string, string>) {
+    const items = getMuItems().map(i =>
+      i.id === id ? { ...i, memberName, muType, fields, resolution: undefined } : i
+    )
+    const newData = { ...rep.data, datos_miembros: items }
+    const updated = { ...rep, data: newData }
+    setRep(updated)
+    await persist(updated, '✏️ Actualización editada')
+  }
+
   async function deleteMuItem(id: string) {
     if (!confirm('¿Eliminar esta actualización?')) return
     const newData = { ...rep.data, datos_miembros: getMuItems().filter(i => i.id !== id) }
@@ -139,21 +129,16 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
   }
 
   const toggleSec = (id: string) => {
-    setOpenSecs(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
+    setOpenSecs(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
   }
 
   const dateStr = rep.council_date
-    ? format(new Date(rep.council_date + 'T12:00:00'), "EEEE d 'de' MMMM, yyyy", { locale: es })
-    : ''
+    ? format(new Date(rep.council_date + 'T12:00:00'), "EEEE d 'de' MMMM, yyyy", { locale: es }) : ''
 
   return (
     <div>
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#1a6b47] text-white px-5 py-3 rounded-full text-sm font-bold shadow-lg">
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-800 text-white px-5 py-3 rounded-full text-sm font-semibold shadow-lg">
           {toast}
         </div>
       )}
@@ -161,21 +146,19 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
         <div className="flex items-center gap-3 mb-5 flex-wrap">
           <button onClick={onBack} className="btn btn-ghost btn-sm">← Volver</button>
           <div className="flex-1 min-w-0">
-            <h2 className="font-serif text-lg text-navy font-semibold truncate">{rep.name}</h2>
-            {dateStr && <p className="text-xs text-gray-400 mt-0.5 capitalize">{dateStr}</p>}
+            <h2 className="font-serif text-lg text-slate-800 font-semibold truncate">{rep.name}</h2>
+            {dateStr && <p className="text-xs text-slate-400 mt-0.5 capitalize">{dateStr}</p>}
           </div>
           <span className={`sec-pill ${published ? 'status-published' : 'status-draft'}`}>
             {published ? '✓ Publicado' : 'Borrador'}
           </span>
         </div>
 
-        <div className={`flex items-center justify-between gap-3 p-3.5 rounded-xl border-[1.5px] mb-5 flex-wrap ${
-          published ? 'bg-green-50 border-green-200 text-green-800' : 'bg-yellow-50 border-yellow-200 text-yellow-800'
+        <div className={`flex items-center justify-between gap-3 p-3.5 rounded-xl border mb-5 flex-wrap ${
+          published ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'
         }`}>
           <span className="text-sm font-medium">
-            {published
-              ? '✅ Publicado — visible para el obispado'
-              : '📝 Borrador — solo visible para tu organización. El obispado no lo ve aún.'}
+            {published ? '✅ Publicado — visible para el obispado' : '📝 Borrador — solo visible para tu organización.'}
           </span>
           <div className="flex gap-2 flex-wrap">
             {!published && (
@@ -186,7 +169,7 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
             {published ? (
               <button onClick={handleUnpublish} disabled={saving} className="btn btn-ghost btn-sm">↩ Revertir a borrador</button>
             ) : (
-              <button onClick={handlePublish} disabled={saving} className="btn btn-gold btn-sm">
+              <button onClick={handlePublish} disabled={saving} className="btn btn-navy btn-sm">
                 {saving ? '...' : '📤 Enviar al Obispado'}
               </button>
             )}
@@ -199,32 +182,22 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
             const count = items.length
             const isOpen = openSecs.has(s.id)
             return (
-              <div key={s.id} className="border-[1.5px] border-[#ddd6c8] rounded-xl overflow-hidden">
-                <button onClick={() => toggleSec(s.id)} className="w-full flex items-center gap-3 p-4 bg-cream hover:bg-cream-dark transition-colors text-left">
+              <div key={s.id} className="border border-slate-200 rounded-xl overflow-hidden">
+                <button onClick={() => toggleSec(s.id)} className="w-full flex items-center gap-3 p-4 bg-slate-50 hover:bg-slate-100 transition-colors text-left">
                   <div className="w-9 h-9 rounded-lg flex items-center justify-center text-lg flex-shrink-0" style={{ background: s.bg }}>{s.icon}</div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold text-sm text-navy flex items-center flex-wrap gap-2">
-                      {s.title}
-                      {(s as any).secAlert && (
-                        <span className="text-[11px] font-bold bg-amber-100 text-amber-800 rounded-full px-2.5 py-0.5">🔔 Notifica al Secretario al publicar</span>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-0.5">{s.desc}</div>
+                    <div className="font-semibold text-sm text-slate-700">{s.title}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">{s.desc}</div>
                   </div>
-                  <span className={`sec-pill ${count ? 'status-published' : 'bg-[#ede8de] text-gray-500'}`}>
+                  <span className={`sec-pill ${count ? 'bg-slate-700 text-white border-transparent' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
                     {count ? `${count} item${count !== 1 ? 's' : ''}` : 'Vacío'}
                   </span>
-                  {isOpen ? <ChevronUp size={14} className="text-gray-400 flex-shrink-0" /> : <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />}
+                  {isOpen ? <ChevronUp size={14} className="text-slate-400 flex-shrink-0" /> : <ChevronDown size={14} className="text-slate-400 flex-shrink-0" />}
                 </button>
                 {isOpen && (
-                  <div className="p-4 border-t border-[#ddd6c8]">
-                    {(s as any).secAlert && (
-                      <div className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 font-medium mb-4">
-                        🔔 Al publicar, el Secretario recibirá una notificación por cada actualización registrada aquí.
-                      </div>
-                    )}
+                  <div className="p-4 border-t border-slate-100">
                     {s.isMU
-                      ? <MUSection items={getMuItems()} profile={profile} published={published} onAdd={addMuItem} onDelete={deleteMuItem} onResolve={resolveMuItem} />
+                      ? <MUSection items={getMuItems()} profile={profile} published={published} onAdd={addMuItem} onEdit={editMuItem} onDelete={deleteMuItem} onResolve={resolveMuItem} />
                       : <ItemSection sid={s.id} sec={s as any} items={getItems(s.id)} profile={profile} published={published} isBish={isBish} onAdd={addItem} onDelete={deleteItem} onEdit={editItem} onResolve={resolveItem} />
                     }
                   </div>
@@ -250,30 +223,15 @@ function ItemSection({ sid, sec, items, profile, published, isBish, onAdd, onDel
   const [editTitle, setEditTitle] = useState('')
   const [editBody, setEditBody] = useState('')
   const [editPri, setEditPri] = useState('')
-  
 
-  async function submit() {
-    await onAdd(sid, title, body, pri)
-    setTitle(''); setBody(''); setShowForm(false)
-  }
+  async function submit() { await onAdd(sid, title, body, pri); setTitle(''); setBody(''); setShowForm(false) }
 
-  function startEdit(it: ReportItem) {
-    setEditingId(it.id)
-    setEditTitle(it.title)
-    setEditBody(it.body ?? '')
-    setEditPri(it.pri)
-  }
-
-  async function submitEdit(it: ReportItem) {
-    await onEdit(sid, it.id, editTitle, editBody, editPri)
-    setEditingId(null)
-  }
+  function startEdit(it: ReportItem) { setEditingId(it.id); setEditTitle(it.title); setEditBody(it.body ?? ''); setEditPri(it.pri) }
+  async function submitEdit(it: ReportItem) { await onEdit(sid, it.id, editTitle, editBody, editPri); setEditingId(null) }
 
   return (
     <div>
-      {!items.length && !showForm && (
-        <p className="text-sm text-gray-400 italic mb-3 py-1">Sin items en esta sección.</p>
-      )}
+      {!items.length && !showForm && <p className="text-sm text-slate-400 italic mb-3 py-1">Sin items en esta sección.</p>}
       {items.map((it: ReportItem) => {
         const resolved = !!it.resolution
         const canReply = sec.isObisp && isBish && !resolved && published
@@ -282,74 +240,57 @@ function ItemSection({ sid, sec, items, profile, published, isBish, onAdd, onDel
         const isEditing = editingId === it.id
 
         return (
-          <div key={it.id} className={`rounded-xl p-4 mb-2.5 border-l-[3px] ${resolved ? 'opacity-60 bg-gray-50 border-l-gray-300' : ''}`}
+          <div key={it.id}
+            className={`rounded-xl p-4 mb-2.5 border-l-[3px] ${resolved ? 'opacity-55 bg-slate-50 border-l-slate-300' : 'border-l-slate-300'}`}
             style={!resolved ? { background: sec.bg, borderLeftColor: sec.color } : {}}>
-
             {isEditing ? (
               <div className="space-y-2.5">
-                <div>
-                  <label className="label">Título</label>
-                  <input className="input text-sm" value={editTitle} onChange={e => setEditTitle(e.target.value)} autoFocus />
+                <div><label className="label">Título</label><input className="input text-sm" value={editTitle} onChange={e => setEditTitle(e.target.value)} autoFocus /></div>
+                <div><label className="label">{sec.pLabel}</label>
+                  <select className="input text-sm" value={editPri} onChange={e => setEditPri(e.target.value)}>
+                    {sec.pOpts.map((o: string) => <option key={o}>{o}</option>)}
+                  </select>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="label">{sec.pLabel}</label>
-                    <select className="input text-sm" value={editPri} onChange={e => setEditPri(e.target.value)}>
-                      {sec.pOpts.map((o: string) => <option key={o}>{o}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="label">Detalles</label>
-                  <textarea className="input text-sm min-h-[60px] resize-none" value={editBody} onChange={e => setEditBody(e.target.value)} />
-                </div>
+                <div><label className="label">Detalles</label><textarea className="input text-sm min-h-[60px] resize-none" value={editBody} onChange={e => setEditBody(e.target.value)} /></div>
                 <div className="flex gap-2">
-                  <button className="btn btn-navy btn-sm" onClick={() => submitEdit(it)} disabled={!editTitle.trim()}>💾 Guardar cambios</button>
+                  <button className="btn btn-navy btn-sm" onClick={() => submitEdit(it)} disabled={!editTitle.trim()}>💾 Guardar</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => setEditingId(null)}>Cancelar</button>
                 </div>
-                {published && <p className="text-xs text-amber-600 font-medium">⚠️ Al guardar, el reporte volverá a borrador y deberás enviarlo al Obispado de nuevo.</p>}
+                {published && <p className="text-xs text-amber-600 font-medium">⚠️ El reporte volverá a borrador al guardar.</p>}
               </div>
             ) : (
               <>
                 <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <p className={`font-bold text-sm leading-snug ${resolved ? 'line-through text-gray-400' : ''}`}>{it.title}</p>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {resolved && <span className="text-[10px] font-bold bg-gray-100 text-gray-500 rounded-full px-2 py-0.5">✓ Cerrado</span>}
-                    <button onClick={() => startEdit(it)} className="text-gray-300 hover:text-navy transition-colors" title="Editar asunto"><Pencil size={13} /></button>
-                    <button onClick={() => onDelete(sid, it.id)} className="text-gray-300 hover:text-red-500 transition-colors" title="Eliminar"><X size={14} /></button>
+                  <p className={`font-semibold text-sm leading-snug ${resolved ? 'line-through text-slate-400' : 'text-slate-700'}`}>{it.title}</p>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {resolved && <span className="text-[10px] font-semibold bg-slate-100 text-slate-500 rounded-full px-2 py-0.5">✓ Cerrado</span>}
+                    <button onClick={() => startEdit(it)} className="icon-btn-edit" title="Editar"><Pencil size={12} /></button>
+                    <button onClick={() => onDelete(sid, it.id)} className="icon-btn-delete" title="Eliminar"><X size={13} /></button>
                   </div>
                 </div>
-                {it.body && <p className="text-sm text-gray-600 leading-relaxed mb-2">{it.body}</p>}
+                {it.body && <p className="text-sm text-slate-600 leading-relaxed mb-2">{it.body}</p>}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full" style={{ background: pc.bg, color: pc.c }}>{it.pri}</span>
-                  {it.ts && <span className="text-[11px] text-gray-400">{format(new Date(it.ts), 'HH:mm')}</span>}
+                  <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full" style={{ background: pc.bg, color: pc.c }}>{it.pri}</span>
+                  {it.ts && <span className="text-[11px] text-slate-400">{format(new Date(it.ts), 'HH:mm')}</span>}
                 </div>
                 {resolved && it.resolution && (
-                  <div className={`mt-3 p-3 rounded-lg ${it.resolution.byBishop ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
-                    <p className={`text-[11px] font-bold mb-1 ${it.resolution.byBishop ? 'text-amber-700' : 'text-green-700'}`}>
+                  <div className="mt-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
+                    <p className="text-[11px] font-semibold text-slate-600 mb-1">
                       {it.resolution.byBishop ? '✍️ Respuesta del Obispo' : '✅ Resuelto'} · {it.resolution.by} · {format(new Date(it.resolution.ts), 'HH:mm')}
                     </p>
-                    {it.resolution.note && <p className="text-sm text-gray-600">{it.resolution.note}</p>}
+                    {it.resolution.note && <p className="text-sm text-slate-600">{it.resolution.note}</p>}
                   </div>
                 )}
                 {!resolved && (canReply || canResolve) && (
                   <div className="flex gap-2 mt-3 flex-wrap">
-                    {canReply && (
-                      <button onClick={() => { setShowRfw(it.id); setRfwMode('reply'); setRfwNote('') }} className="btn btn-gold btn-sm">
-                        <MessageSquare size={12} /> Responder
-                      </button>
-                    )}
-                    {canResolve && (
-                      <button onClick={() => { setShowRfw(it.id); setRfwMode('resolve'); setRfwNote('') }} className="btn btn-green btn-sm">
-                        <CheckCircle size={12} /> Marcar resuelto
-                      </button>
-                    )}
+                    {canReply && <button onClick={() => { setShowRfw(it.id); setRfwMode('reply'); setRfwNote('') }} className="btn btn-gold btn-sm"><MessageSquare size={12} /> Responder</button>}
+                    {canResolve && <button onClick={() => { setShowRfw(it.id); setRfwMode('resolve'); setRfwNote('') }} className="btn btn-green btn-sm"><CheckCircle size={12} /> Marcar resuelto</button>}
                   </div>
                 )}
                 {showRfw === it.id && (
-                  <div className="mt-3 p-3.5 bg-blue-50 border border-blue-200 rounded-xl">
-                    <label className="label">{rfwMode === 'reply' ? 'Respuesta del Obispo' : 'Nota de resolución (opcional)'}</label>
-                    <textarea className="input min-h-[64px] resize-none" placeholder="Escribe una respuesta, acción tomada o nota..." value={rfwNote} onChange={e => setRfwNote(e.target.value)} autoFocus />
+                  <div className="mt-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <label className="label">{rfwMode === 'reply' ? 'Respuesta del Obispo' : 'Nota (opcional)'}</label>
+                    <textarea className="input min-h-[64px] resize-none" placeholder="Escribe una respuesta o nota..." value={rfwNote} onChange={e => setRfwNote(e.target.value)} autoFocus />
                     <div className="flex gap-2 mt-2">
                       <button className="btn btn-navy btn-sm" onClick={async () => { await onResolve(sid, it.id, rfwNote, rfwMode === 'reply'); setShowRfw(null) }}>Confirmar</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => setShowRfw(null)}>Cancelar</button>
@@ -361,9 +302,8 @@ function ItemSection({ sid, sec, items, profile, published, isBish, onAdd, onDel
           </div>
         )
       })}
-
       {showForm ? (
-        <div className="mt-2 p-4 bg-blue-50 border-[1.5px] border-dashed border-blue-200 rounded-xl">
+        <div className="mt-2 p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             <div>
               <label className="label">{sid === 'miembros' ? 'Nombre del hermano / familia' : 'Título'}</label>
@@ -376,10 +316,7 @@ function ItemSection({ sid, sec, items, profile, published, isBish, onAdd, onDel
               </select>
             </div>
           </div>
-          <div className="mb-3">
-            <label className="label">Detalles</label>
-            <textarea className="input min-h-[70px] resize-none" placeholder="Descripción o notas..." value={body} onChange={e => setBody(e.target.value)} />
-          </div>
+          <div className="mb-3"><label className="label">Detalles</label><textarea className="input min-h-[70px] resize-none" placeholder="Descripción o notas..." value={body} onChange={e => setBody(e.target.value)} /></div>
           <div className="flex gap-2">
             <button className="btn btn-navy btn-sm" onClick={submit} disabled={!title.trim()}>💾 Guardar</button>
             <button className="btn btn-ghost btn-sm" onClick={() => { setShowForm(false); setTitle(''); setBody('') }}>Cancelar</button>
@@ -392,113 +329,138 @@ function ItemSection({ sid, sec, items, profile, published, isBish, onAdd, onDel
   )
 }
 
-function MUSection({ items, profile, published, onAdd, onDelete, onResolve }: any) {
+function MUSection({ items, profile, published, onAdd, onEdit, onDelete, onResolve }: any) {
   const [showForm, setShowForm] = useState(false)
   const [muName, setMuName] = useState('')
   const [muType, setMuType] = useState('new')
   const [fields, setFields] = useState<Record<string, string>>({})
   const [showRfw, setShowRfw] = useState<string | null>(null)
   const [rfwNote, setRfwNote] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editType, setEditType] = useState('new')
+  const [editFields, setEditFields] = useState<Record<string, string>>({})
   const isBish = isBishopric(profile.role)
   const mt = getMuType(muType)
+  const editMt = getMuType(editType)
 
   function setField(id: string, val: string) { setFields(f => ({ ...f, [id]: val })) }
+  function setEditField(id: string, val: string) { setEditFields(f => ({ ...f, [id]: val })) }
 
-  async function submit() {
-    await onAdd(muName, muType, fields)
-    setMuName(''); setFields({}); setShowForm(false)
+  async function submit() { await onAdd(muName, muType, fields); setMuName(''); setFields({}); setShowForm(false) }
+
+  function startEdit(it: MemberUpdateItem) {
+    setEditingId(it.id); setEditName(it.memberName); setEditType(it.muType); setEditFields({ ...it.fields })
   }
+  async function submitEdit(id: string) { await onEdit(id, editName, editType, editFields); setEditingId(null) }
 
   const MU_TYPE_COLORS: Record<string, string> = {
-    new: 'text-green-700 bg-green-100', out: 'text-red-700 bg-red-100',
-    phone: 'text-blue-700 bg-blue-100', address: 'text-blue-700 bg-blue-100',
-    name: 'text-purple-700 bg-purple-100', death: 'text-gray-700 bg-gray-100'
+    new: 'text-slate-700 bg-slate-100', out: 'text-slate-700 bg-slate-100',
+    phone: 'text-slate-700 bg-slate-100', address: 'text-slate-700 bg-slate-100',
+    name: 'text-slate-700 bg-slate-100', death: 'text-slate-700 bg-slate-100'
   }
 
   return (
     <div>
-      {!items.length && !showForm && (
-        <p className="text-sm text-gray-400 italic mb-3 py-1">Sin actualizaciones de miembros.</p>
-      )}
+      {!items.length && !showForm && <p className="text-sm text-slate-400 italic mb-3 py-1">Sin actualizaciones de miembros.</p>}
       {items.map((it: MemberUpdateItem) => {
         const mt2 = getMuType(it.muType)
         const done = !!it.resolution
+        const isEditing = editingId === it.id
+
         return (
-          <div key={it.id} className="rounded-xl p-4 mb-3 border-[1.5px]" style={{ background: mt2.cardColor, borderColor: mt2.borderColor }}>
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <p className="font-bold text-base">{it.memberName}</p>
-              <div className="flex items-center gap-2">
-                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${MU_TYPE_COLORS[it.muType] ?? 'bg-gray-100 text-gray-700'}`}>{mt2.label}</span>
-                <button onClick={() => onDelete(it.id)} className="text-gray-300 hover:text-red-500 transition-colors"><X size={14} /></button>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-              {mt2.fields.filter((f: any) => it.fields?.[f.id]).map((f: any) => (
-                <div key={f.id} className="bg-white/70 rounded-lg p-2.5">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">{f.label}</div>
-                  <div className="text-sm font-medium">{it.fields[f.id]}</div>
-                </div>
-              ))}
-            </div>
-            {done ? (
-              <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-[11px] font-bold text-green-700 mb-1">✅ Actualizado en registros · {it.resolution!.by}</p>
-                {it.resolution!.note && <p className="text-sm text-gray-600">{it.resolution!.note}</p>}
-              </div>
-            ) : it.readBySec ? (
-              <div className="mt-3">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <span className="text-xs font-bold text-green-700">✓ Recibido por el Secretario</span>
-                  {isBish && (
-                    <button onClick={() => { setShowRfw(it.id); setRfwNote('') }} className="btn btn-green btn-sm">
-                      <CheckCircle size={12} /> Marcar actualizado en registros
-                    </button>
-                  )}
-                </div>
-                {showRfw === it.id && (
-                  <div className="mt-3 p-3.5 bg-blue-50 border border-blue-200 rounded-xl">
-                    <label className="label">Nota de confirmación (opcional)</label>
-                    <textarea className="input min-h-[60px] resize-none" value={rfwNote} onChange={e => setRfwNote(e.target.value)} autoFocus />
-                    <div className="flex gap-2 mt-2">
-                      <button className="btn btn-navy btn-sm" onClick={async () => { await onResolve(it.id, rfwNote); setShowRfw(null) }}>Confirmar</button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setShowRfw(null)}>Cancelar</button>
-                    </div>
+          <div key={it.id} className="rounded-xl p-4 mb-3 border border-slate-200 bg-white">
+            {isEditing ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div><label className="label">Nombre</label><input className="input" value={editName} onChange={e => setEditName(e.target.value)} autoFocus /></div>
+                  <div><label className="label">Tipo</label>
+                    <select className="input" value={editType} onChange={e => { setEditType(e.target.value); setEditFields({}) }}>
+                      {MU_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                    </select>
                   </div>
-                )}
+                </div>
+                <div className={`grid gap-3 ${editMt.fields.length > 2 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+                  {editMt.fields.map((f: any) => (
+                    <div key={f.id}><label className="label">{f.label}</label>
+                      <input className="input" placeholder={f.label + '...'} value={editFields[f.id] ?? ''} onChange={e => setEditField(f.id, e.target.value)} />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button className="btn btn-navy btn-sm" onClick={() => submitEdit(it.id)} disabled={!editName.trim()}>💾 Guardar</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditingId(null)}>Cancelar</button>
+                </div>
               </div>
-            ) : published ? (
-              <p className="mt-2.5 text-xs font-bold text-amber-600">⏳ Pendiente — el Secretario aún no ha revisado</p>
             ) : (
-              <p className="mt-2.5 text-xs text-gray-400">Se notificará al Secretario cuando publiques el reporte.</p>
+              <>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <p className="font-semibold text-sm text-slate-700">{it.memberName}</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${MU_TYPE_COLORS[it.muType] ?? 'bg-slate-100 text-slate-700'}`}>{mt2.label}</span>
+                    <button onClick={() => startEdit(it)} className="icon-btn-edit" title="Editar"><Pencil size={12} /></button>
+                    <button onClick={() => onDelete(it.id)} className="icon-btn-delete" title="Eliminar"><X size={13} /></button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                  {mt2.fields.filter((f: any) => it.fields?.[f.id]).map((f: any) => (
+                    <div key={f.id} className="bg-slate-50 rounded-lg p-2.5 border border-slate-100">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{f.label}</div>
+                      <div className="text-sm text-slate-700">{it.fields[f.id]}</div>
+                    </div>
+                  ))}
+                </div>
+                {done ? (
+                  <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                    <p className="text-[11px] font-semibold text-slate-600 mb-1">✅ Actualizado en registros · {it.resolution!.by}</p>
+                    {it.resolution!.note && <p className="text-sm text-slate-500">{it.resolution!.note}</p>}
+                  </div>
+                ) : it.readBySec ? (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <span className="text-xs font-semibold text-emerald-600">✓ Recibido por el Secretario</span>
+                      {isBish && <button onClick={() => { setShowRfw(it.id); setRfwNote('') }} className="btn btn-green btn-sm"><CheckCircle size={12} /> Marcar actualizado</button>}
+                    </div>
+                    {showRfw === it.id && (
+                      <div className="mt-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                        <label className="label">Nota de confirmación (opcional)</label>
+                        <textarea className="input min-h-[56px] resize-none" value={rfwNote} onChange={e => setRfwNote(e.target.value)} autoFocus />
+                        <div className="flex gap-2 mt-2">
+                          <button className="btn btn-navy btn-sm" onClick={async () => { await onResolve(it.id, rfwNote); setShowRfw(null) }}>Confirmar</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setShowRfw(null)}>Cancelar</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : published ? (
+                  <p className="mt-2.5 text-xs font-semibold text-amber-600">⏳ Pendiente — el Secretario aún no ha revisado</p>
+                ) : (
+                  <p className="mt-2.5 text-xs text-slate-400">Se notificará al Secretario cuando publiques el reporte.</p>
+                )}
+              </>
             )}
           </div>
         )
       })}
-
       {showForm ? (
-        <div className="mt-2 p-4 bg-green-50 border-[1.5px] border-dashed border-green-300 rounded-xl">
+        <div className="mt-2 p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="label">Nombre del hermano / familia</label>
-              <input className="input" type="text" placeholder="Ej: Familia Rojas" value={muName} onChange={e => setMuName(e.target.value)} autoFocus />
-            </div>
-            <div>
-              <label className="label">Tipo de actualización</label>
+            <div><label className="label">Nombre del hermano / familia</label><input className="input" type="text" placeholder="Ej: Familia Rojas" value={muName} onChange={e => setMuName(e.target.value)} autoFocus /></div>
+            <div><label className="label">Tipo de actualización</label>
               <select className="input" value={muType} onChange={e => { setMuType(e.target.value); setFields({}) }}>
                 {MU_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
             </div>
           </div>
-          <div className={`grid gap-3 mb-3 ${mt.fields.length > 2 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+          <div className={`grid gap-3 mb-3 ${mt.fields.length > 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
             {mt.fields.map((f: any) => (
-              <div key={f.id}>
-                <label className="label">{f.label}</label>
+              <div key={f.id}><label className="label">{f.label}</label>
                 <input className="input" type="text" placeholder={f.label + '...'} value={fields[f.id] ?? ''} onChange={e => setField(f.id, e.target.value)} />
               </div>
             ))}
           </div>
           <div className="flex gap-2">
-            <button className="btn btn-green btn-sm" onClick={submit} disabled={!muName.trim()}>💾 Guardar</button>
+            <button className="btn btn-navy btn-sm" onClick={submit} disabled={!muName.trim()}>💾 Guardar</button>
             <button className="btn btn-ghost btn-sm" onClick={() => { setShowForm(false); setMuName(''); setFields({}) }}>Cancelar</button>
           </div>
         </div>
