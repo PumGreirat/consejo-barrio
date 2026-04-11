@@ -12,7 +12,7 @@ export function EventsTab({ events, onRefresh, profile }: { events: Event[]; onR
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const supabase = createClient()
-  const canEdit = isBishopric(profile.role)
+  const canEdit = true
 
   // Form state
   const [name, setName] = useState('')
