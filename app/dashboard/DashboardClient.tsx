@@ -66,7 +66,8 @@ export default function DashboardClient({ profile }: { profile: Profile }) {
       <header className="bg-navy text-white h-[62px] px-5 flex items-center justify-between sticky top-0 z-50 shadow-lg">
         <div className="flex items-center gap-3">
           <span className="text-[#d4a044] text-xl">📋</span>
-          <h1 className="font-serif text-[19px] font-semibold">Consejo de Barrio</h1>
+          <h1 className="font-serif text-base font-semibold hidden sm:block">Consejo de Barrio</h1>
+          <h1 className="font-serif text-base font-semibold sm:hidden">C. Barrio</h1>
         </div>
         <div className="flex items-center gap-2.5">
           {isBish && (
@@ -79,7 +80,7 @@ export default function DashboardClient({ profile }: { profile: Profile }) {
               )}
             </button>
           )}
-          <div className="bg-white/10 rounded-full px-3.5 py-1.5 text-xs font-medium flex items-center gap-2 max-w-[260px] overflow-hidden">
+          <div className="bg-white/10 rounded-full px-3 py-1.5 text-xs font-medium items-center gap-2 max-w-[140px] sm:max-w-[260px] overflow-hidden hidden sm:flex">
             <span className="w-2 h-2 rounded-full bg-[#d4a044] flex-shrink-0" />
             <span className="truncate">{profile.name} · {ROLE_LABELS[profile.role] ?? profile.role}</span>
           </div>
