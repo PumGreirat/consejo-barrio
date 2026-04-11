@@ -419,7 +419,7 @@ function MUSection({ items, profile, published, onAdd, onEdit, onDelete, onResol
                   <div className="mt-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <span className="text-xs font-semibold text-emerald-600">✓ Recibido por el Secretario</span>
-                      {isBish && <button onClick={() => { setShowRfw(it.id); setRfwNote('') }} className="btn btn-green btn-sm"><CheckCircle size={12} /> Marcar actualizado</button>}
+                      <button onClick={() => { setShowRfw(it.id); setRfwNote('') }} className="btn btn-green btn-sm"><CheckCircle size={12} /> Marcar actualizado</button>
                     </div>
                     {showRfw === it.id && (
                       <div className="mt-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
@@ -433,7 +433,7 @@ function MUSection({ items, profile, published, onAdd, onEdit, onDelete, onResol
                     )}
                   </div>
                 ) : published ? (
-                  <p className="mt-2.5 text-xs font-semibold text-amber-600">⏳ Pendiente — el Secretario aún no ha revisado</p>
+                  
                 ) : (
                   <p className="mt-2.5 text-xs text-slate-400">Se notificará al Secretario cuando publiques el reporte.</p>
                 )}

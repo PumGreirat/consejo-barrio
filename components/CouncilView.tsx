@@ -383,7 +383,7 @@ function MUCard({ it, repId, profile, onResolve, onDelete }: any) {
         <div className="mt-2.5">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <span className="text-xs font-bold text-green-700">✓ Recibido por el Secretario</span>
-            {isBishopric(profile.role) && <button onClick={() => setShowForm(true)} className="btn btn-green btn-sm text-xs">✅ Marcar actualizado</button>}
+            <button onClick={() => setShowForm(true)} className="btn btn-green btn-sm text-xs">✅ Marcar actualizado</button>
           </div>
           {showForm && (
             <div className="mt-2.5 p-3 bg-blue-50 border border-blue-200 rounded-xl">
@@ -396,7 +396,7 @@ function MUCard({ it, repId, profile, onResolve, onDelete }: any) {
             </div>
           )}
         </div>
-      ) : <p className="mt-2 text-xs font-bold text-amber-600">⏳ Pendiente revisión del Secretario</p>}
+      
     </div>
   )
 }
