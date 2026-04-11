@@ -396,7 +396,7 @@ function MUCard({ it, repId, profile, onResolve, onDelete }: any) {
             </div>
           )}
         </div>
-      
+      ) : null}
     </div>
   )
 }
