@@ -58,7 +58,7 @@ export default function DashboardClient({ profile }: { profile: Profile }) {
     { id: 'reports', label: '📝 Mis Reportes' },
     { id: 'council', label: '📋 Vista del Consejo', bishOnly: true },
     { id: 'events', label: '📅 Eventos' },
-    { id: 'members', label: '👥 Miembros' },
+    
   ]
 
   return (
