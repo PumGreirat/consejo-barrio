@@ -41,8 +41,7 @@ export default function CouncilView({ reports, profile, onRefresh }: Props) {
     .map(([sunday, reps]) => {
       let totalItems = 0, resolvedItems = 0, urgentUnresolved = 0
       reps.forEach(r => {
-        Object.values(r.data ?? {}).forEach((arr: any[]) => {
-          if (!Array.isArray(arr)) return
+        Object.values(r.data ?? {}).forEach((arr: any) => {
           if (!Array.isArray(arr)) return
           arr.forEach((item: any) => {
             if (item._folder_label !== undefined) return
@@ -137,8 +136,10 @@ export default function CouncilView({ reports, profile, onRefresh }: Props) {
                   <div className="flex-1 min-w-0 cursor-pointer" onClick={() => !isEditing && setOpenFolder(isOpen ? null : folder.sunday)}>
                     {isEditing ? (
                       <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                        <input className="input text-sm py-1.5 flex-1" value={labelValue} onChange={e => setLabelValue(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') saveLabel(folder); if (e.key === 'Escape') setEditingLabel(null) }} autoFocus />
+                        <input className="input text-sm py-1.5 flex-1" value={labelValue}
+                          onChange={e => setLabelValue(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveLabel(folder); if (e.key === 'Escape') setEditingLabel(null) }}
+                          autoFocus />
                         <button onClick={() => saveLabel(folder)} className="btn btn-navy btn-sm">✓</button>
                         <button onClick={() => setEditingLabel(null)} className="btn btn-ghost btn-sm">✕</button>
                       </div>
@@ -235,11 +236,12 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
   }
 
   let total = 0, resolved = 0
-  reports.forEach(r => { Object.values(r.data ?? {}).forEach((arr: any) => { 
-  if (!Array.isArray(arr)) return
-  arr.forEach((i: any) => { 
-  if (!Array.isArray(arr)) return
-  arr.forEach((i: any) => { total++; if (i.resolution) resolved++ }) }) })
+  reports.forEach(r => {
+    Object.values(r.data ?? {}).forEach((arr: any) => {
+      if (!Array.isArray(arr)) return
+      arr.forEach((i: any) => { total++; if (i.resolution) resolved++ })
+    })
+  })
 
   return (
     <div>
@@ -256,7 +258,7 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
           const rep = reports.filter(r => r.org_id === org.id).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0]
           if (!rep) return
           const items = (rep.data as any)[s.id] ?? []
-          if (!items.length) return
+          if (!Array.isArray(items) || !items.length) return
           blocks.push({ org, items, repId: rep.id })
         })
         if (!blocks.length) return null
