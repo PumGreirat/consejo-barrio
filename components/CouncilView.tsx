@@ -43,6 +43,7 @@ export default function CouncilView({ reports, profile, onRefresh }: Props) {
       reps.forEach(r => {
         Object.values(r.data ?? {}).forEach((arr: any[]) => {
           if (!Array.isArray(arr)) return
+          if (!Array.isArray(arr)) return
           arr.forEach((item: any) => {
             if (item._folder_label !== undefined) return
             totalItems++
@@ -235,6 +236,8 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
 
   let total = 0, resolved = 0
   reports.forEach(r => { Object.values(r.data ?? {}).forEach((arr: any) => { 
+  if (!Array.isArray(arr)) return
+  arr.forEach((i: any) => { 
   if (!Array.isArray(arr)) return
   arr.forEach((i: any) => { total++; if (i.resolution) resolved++ }) }) })
 
