@@ -42,6 +42,15 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
   }, [supabase, onUpdate])
 
   async function handlePublish() {
+    // Bug 3: validar que el reporte no esté vacío antes de publicar
+    const totalItems = Object.values(rep.data).reduce((sum, val) => {
+      if (!Array.isArray(val)) return sum
+      return sum + val.length
+    }, 0)
+    if (totalItems === 0) {
+      alert('⚠️ Reporte vacío\n\nAgrega al menos un asunto antes de enviarlo al Obispado.\n\nUsa las secciones de abajo para agregar información.')
+      return
+    }
     if (!confirm('¿Enviar este reporte al Obispado?\n\nEl obispado podrá verlo. Podrás revertirlo a borrador después.')) return
     const updated = { ...rep, status: 'published' as const }
     await persist(updated, '📤 Reporte enviado al Obispado')
@@ -226,7 +235,14 @@ function ItemSection({ sid, sec, items, profile, published, isBish, onAdd, onDel
 
   async function submit() { await onAdd(sid, title, body, pri); setTitle(''); setBody(''); setShowForm(false) }
 
-  function startEdit(it: ReportItem) { setEditingId(it.id); setEditTitle(it.title); setEditBody(it.body ?? ''); setEditPri(it.pri) }
+  function startEdit(it: ReportItem) {
+    // Bug 8: advertir si el item ya fue resuelto/respondido por el obispado
+    if (it.resolution) {
+      const tipo = it.resolution.byBishop ? 'respondido por el Obispo' : 'marcado como resuelto'
+      if (!confirm(`Este asunto ya fue ${tipo}.\n\n¿Editar de todas formas?\n\nSe perderá la resolución existente.`)) return
+    }
+    setEditingId(it.id); setEditTitle(it.title); setEditBody(it.body ?? ''); setEditPri(it.pri)
+  }
   async function submitEdit(it: ReportItem) { await onEdit(sid, it.id, editTitle, editBody, editPri); setEditingId(null) }
 
   return (

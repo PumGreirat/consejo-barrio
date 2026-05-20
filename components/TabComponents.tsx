@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Event, Notification, Profile, ORGS, ROLE_LABELS, getMuType, isBishopric } from '@/types'
+import { Event, Notification, Profile, getMuType, isBishopric } from '@/types'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Plus, X, Pencil, Trash2 } from 'lucide-react'
@@ -12,7 +12,8 @@ export function EventsTab({ events, onRefresh, profile }: { events: Event[]; onR
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const supabase = createClient()
-  const canEdit = true
+  // Solo el obispado puede editar/eliminar eventos de otros; cualquiera puede crear
+  const canEdit = isBishopric(profile.role)
 
   // Form state
   const [name, setName] = useState('')
@@ -190,50 +191,18 @@ export function EventsTab({ events, onRefresh, profile }: { events: Event[]; onR
 }
 
 
-// ── MEMBERS TAB ───────────────────────────────────────────────
-export function MembersTab({ members }: { members: Profile[] }) {
-  return (
-    <div className="card">
-      <h2 className="font-serif text-xl text-navy font-semibold mb-1">👥 Miembros del Consejo</h2>
-      <p className="text-xs text-gray-400 mb-5">Líderes con acceso al sistema</p>
-      {ORGS.map(org => {
-        const ms = members.filter(m => org.roles.includes(m.role as never))
-        if (!ms.length) return null
-        return (
-          <div key={org.id} className="mb-6">
-            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-cream-dark">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ background: org.color }} />
-              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: org.color }}>{org.name}</span>
-            </div>
-            {ms.map(m => {
-              const ini = m.name.split(' ').filter(w => w.length > 2).slice(-2).map(w => w[0]).join('').toUpperCase() || '??'
-              const isSec = ['sec_ba','sec_ej'].includes(m.role)
-              return (
-                <div key={m.id} className="flex items-center gap-3 py-2.5 border-b border-cream-dark last:border-0">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style={{ background: org.color }}>{ini}</div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm">{m.name}</p>
-                    <p className="text-xs text-gray-400">{ROLE_LABELS[m.role] ?? m.role}</p>
-                  </div>
-                  {isSec && <span className="text-[10px] font-bold bg-amber-100 text-amber-800 rounded-full px-2.5 py-1">🔔 Secretario</span>}
-                </div>
-              )
-            })}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 // ── NOTIF PANEL ───────────────────────────────────────────────
 export function NotifPanel({ open, notifs, onClose, onRefresh, profile }: { open: boolean; notifs: Notification[]; onClose: () => void; onRefresh: () => Promise<void>; profile: Profile }) {
   const supabase = createClient()
 
   async function markRead(nid: string, memberId: string) {
+    // Bug 4 fix: marcar notificación y buscar solo reportes que contengan ese item
     await supabase.from('notifications').update({ is_read: true }).eq('id', nid)
-    // Also update readBySec on the report item
-    const { data: reps } = await supabase.from('reports').select('id, data')
+    // Buscar el reporte específico usando jsonb en vez de descargar todos
+    const { data: reps } = await supabase
+      .from('reports')
+      .select('id, data')
+      .contains('data', { datos_miembros: [{ id: memberId }] } as any)
     for (const rep of reps ?? []) {
       const items = (rep.data?.datos_miembros ?? []) as any[]
       const idx = items.findIndex((i: any) => i.id === memberId)

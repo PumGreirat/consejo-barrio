@@ -4,17 +4,16 @@ import { createClient } from '@/lib/supabase'
 import { Profile, Report, Event, Notification, isBishopric, ROLE_LABELS } from '@/types'
 import ReportsTab from '@/components/ReportsTab'
 import CouncilView from '@/components/CouncilView'
-import { EventsTab, MembersTab, NotifPanel } from '@/components/TabComponents'
+import { EventsTab, NotifPanel } from '@/components/TabComponents'
 import { Bell, LogOut } from 'lucide-react'
 
-type Tab = 'reports' | 'council' | 'events' | 'members'
+type Tab = 'reports' | 'council' | 'events'
 
 export default function DashboardClient({ profile }: { profile: Profile }) {
   const [tab, setTab] = useState<Tab>('reports')
   const [reports, setReports] = useState<Report[]>([])
   const [events, setEvents] = useState<Event[]>([])
   const [notifs, setNotifs] = useState<Notification[]>([])
-  const [members, setMembers] = useState<Profile[]>([])
   const [npOpen, setNpOpen] = useState(false)
   const supabase = createClient()
   const isBish = isBishopric(profile.role)
@@ -35,17 +34,12 @@ export default function DashboardClient({ profile }: { profile: Profile }) {
     if (data) setNotifs(data as Notification[])
   }, [supabase, isBish])
 
-  const fetchMembers = useCallback(async () => {
-    const { data } = await supabase.from('profiles').select('*').order('name')
-    if (data) setMembers(data as Profile[])
-  }, [supabase])
-
   useEffect(() => {
-    fetchReports(); fetchEvents(); fetchNotifs(); fetchMembers()
+    fetchReports(); fetchEvents(); fetchNotifs()
     const ch1 = supabase.channel('rpt').on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, fetchReports).subscribe()
     const ch2 = supabase.channel('ntf').on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, fetchNotifs).subscribe()
     return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2) }
-  }, [fetchReports, fetchEvents, fetchNotifs, fetchMembers, supabase])
+  }, [fetchReports, fetchEvents, fetchNotifs, supabase])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -58,7 +52,6 @@ export default function DashboardClient({ profile }: { profile: Profile }) {
     { id: 'reports', label: '📝 Mis Reportes' },
     { id: 'council', label: '📋 Vista del Consejo', bishOnly: true },
     { id: 'events', label: '📅 Eventos' },
-    
   ]
 
   return (
@@ -107,7 +100,6 @@ export default function DashboardClient({ profile }: { profile: Profile }) {
         {tab === 'reports' && <ReportsTab profile={profile} reports={reports} onRefresh={fetchReports} />}
         {tab === 'council' && isBish && <CouncilView reports={reports} profile={profile} onRefresh={fetchReports} />}
         {tab === 'events' && <EventsTab events={events} onRefresh={fetchEvents} profile={profile} />}
-        {tab === 'members' && <MembersTab members={members} />}
       </main>
     </div>
   )

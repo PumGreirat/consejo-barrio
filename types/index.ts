@@ -27,6 +27,7 @@ export const ROLE_LABELS: Record<string, string> = {
   pres_ed: 'Pte. Escuela Dominical',
   c1_ed: 'Consejero - E. Dominical',
   sec_ed: 'Secretario - E. Dominical',
+  pres_om: 'Pte. Obra Misional',
 }
 
 export const ORGS = [
@@ -37,6 +38,7 @@ export const ORGS = [
   { id: 'sa', name: 'Sacerdocio Aarónico', color: '#065f46', roles: ['ayud_pr','pres_ma','pres_di'] },
   { id: 'pm', name: 'Primaria', color: '#92400e', roles: ['pres_pm','c1_pm','sec_pm'] },
   { id: 'ed', name: 'Escuela Dominical', color: '#9f1239', roles: ['pres_ed','c1_ed','sec_ed'] },
+  { id: 'om', name: 'Obra Misional', color: '#0891b2', roles: ['pres_om'] },
 ] as const
 
 export function getOrg(role: string) {
