@@ -126,8 +126,8 @@ export default function ReportsTab({ profile, reports, onRefresh }: Props) {
       setNewName('')
       // Abrir el año y mes del nuevo reporte automáticamente
       const d = new Date(sunday + 'T12:00:00')
-      setOpenYears(prev => new Set([...prev, d.getFullYear()]))
-      setOpenMonths(prev => new Set([...prev, format(d, 'yyyy-MM')]))
+      setOpenYears(prev => { const n = new Set(prev); n.add(d.getFullYear()); return n })
+      setOpenMonths(prev => { const n = new Set(prev); n.add(format(d, 'yyyy-MM')); return n })
     }
   }
 
