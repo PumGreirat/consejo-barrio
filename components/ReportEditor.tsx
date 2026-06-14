@@ -6,6 +6,22 @@ import { ChevronDown, ChevronUp, Plus, X, CheckCircle, MessageSquare, Pencil } f
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
+// Soporta items en formato viejo (resolution: {note, by, byBishop, ts})
+// y nuevo (notes: [...], resolved: boolean) usado en Vista del Consejo
+function isItemResolved(it: any): boolean {
+  return typeof it.resolved === 'boolean' ? it.resolved : !!it.resolution
+}
+function getItemNotes(it: any): any[] {
+  if (Array.isArray(it.notes)) return it.notes
+  if (it.resolution) {
+    return [{ id: 'legacy', text: it.resolution.note ?? '', by: it.resolution.by, byBishop: it.resolution.byBishop, ts: it.resolution.ts }]
+  }
+  return []
+}
+function genId(): string {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)
+}
+
 interface Props {
   report: Report
   profile: Profile
@@ -82,17 +98,23 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
   }
 
   async function editItem(sid: string, id: string, title: string, body: string, pri: string) {
-    const items = getItems(sid).map(i => i.id === id ? { ...i, title, body, pri, resolution: undefined } : i)
+    const items = getItems(sid).map(i => i.id === id ? { ...i, title, body, pri, resolution: undefined, notes: undefined, resolved: undefined } : i)
     const updated = setItems(sid, items as ReportItem[])
     if (published) { updated.status = 'draft'; setRep(r => ({ ...r, status: 'draft' })) }
     await persist(updated, '✏️ Asunto editado')
   }
 
   async function resolveItem(sid: string, id: string, note: string, byBishop: boolean) {
-    const items = getItems(sid).map(i =>
-      i.id === id ? { ...i, resolution: { note, by: profile.name, byBishop, ts: Date.now() } } : i
-    )
-    await persist(setItems(sid, items), byBishop ? '✍️ Respuesta guardada' : '✅ Marcado como resuelto')
+    const items = getItems(sid).map(i => {
+      if (i.id !== id) return i
+      const { resolution, ...rest } = i
+      let notes = getItemNotes(i)
+      if (note.trim()) notes = [...notes, { id: genId(), text: note.trim(), by: profile.name, byBishop, ts: Date.now() }]
+      const updated: any = { ...rest, notes, resolved: isItemResolved(i) }
+      if (!byBishop) { updated.resolved = true; updated.resolvedBy = profile.name; updated.resolvedAt = Date.now() }
+      return updated
+    })
+    await persist(setItems(sid, items as ReportItem[]), byBishop ? '✍️ Respuesta guardada' : '✅ Marcado como resuelto')
   }
 
   function getMuItems(): MemberUpdateItem[] { return (rep.data.datos_miembros ?? []) as MemberUpdateItem[] }
@@ -111,7 +133,7 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
 
   async function editMuItem(id: string, memberName: string, muType: string, fields: Record<string, string>) {
     const items = getMuItems().map(i =>
-      i.id === id ? { ...i, memberName, muType, fields, resolution: undefined } : i
+      i.id === id ? { ...i, memberName, muType, fields, resolution: undefined, notes: undefined, resolved: undefined } : i
     )
     const newData = { ...rep.data, datos_miembros: items }
     const updated = { ...rep, data: newData }
@@ -128,10 +150,15 @@ export default function ReportEditor({ report, profile, onBack, onUpdate }: Prop
   }
 
   async function resolveMuItem(id: string, note: string) {
-    const items = getMuItems().map(i =>
-      i.id === id ? { ...i, resolution: { note, by: profile.name, ts: Date.now() } } : i
-    )
-    const newData = { ...rep.data, datos_miembros: items }
+    const items = getMuItems().map(i => {
+      if (i.id !== id) return i
+      const { resolution, ...rest } = i
+      const notes = getItemNotes(i)
+      const updated: any = { ...rest, notes, resolved: true, resolvedBy: profile.name, resolvedAt: Date.now() }
+      if (note.trim()) updated.notes = [...notes, { id: genId(), text: note.trim(), by: profile.name, byBishop: false, ts: Date.now() }]
+      return updated
+    })
+    const newData = { ...rep.data, datos_miembros: items as MemberUpdateItem[] }
     const updated = { ...rep, data: newData }
     setRep(updated)
     await persist(updated, '✅ Marcado como completado')
@@ -237,9 +264,8 @@ function ItemSection({ sid, sec, items, profile, published, isBish, onAdd, onDel
 
   function startEdit(it: ReportItem) {
     // Bug 8: advertir si el item ya fue resuelto/respondido por el obispado
-    if (it.resolution) {
-      const tipo = it.resolution.byBishop ? 'respondido por el Obispo' : 'marcado como resuelto'
-      if (!confirm(`Este asunto ya fue ${tipo}.\n\n¿Editar de todas formas?\n\nSe perderá la resolución existente.`)) return
+    if (isItemResolved(it) || getItemNotes(it).length > 0) {
+      if (!confirm(`Este asunto ya tiene notas/respuestas del obispado.\n\n¿Editar de todas formas?\n\nSe perderán las notas existentes.`)) return
     }
     setEditingId(it.id); setEditTitle(it.title); setEditBody(it.body ?? ''); setEditPri(it.pri)
   }
@@ -249,7 +275,8 @@ function ItemSection({ sid, sec, items, profile, published, isBish, onAdd, onDel
     <div>
       {!items.length && !showForm && <p className="text-sm text-slate-400 italic mb-3 py-1">Sin items en esta sección.</p>}
       {items.map((it: ReportItem) => {
-        const resolved = !!it.resolution
+        const resolved = isItemResolved(it)
+        const notes = getItemNotes(it)
         const canReply = sec.isObisp && isBish && !resolved && published
         const canResolve = !resolved && published && isBish
         const pc = priColor(it.pri)
@@ -289,12 +316,16 @@ function ItemSection({ sid, sec, items, profile, published, isBish, onAdd, onDel
                   <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full" style={{ background: pc.bg, color: pc.c }}>{it.pri}</span>
                   {it.ts && <span className="text-[11px] text-slate-400">{format(new Date(it.ts), 'HH:mm')}</span>}
                 </div>
-                {resolved && it.resolution && (
-                  <div className="mt-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
-                    <p className="text-[11px] font-semibold text-slate-600 mb-1">
-                      {it.resolution.byBishop ? '✍️ Respuesta del Obispo' : '✅ Resuelto'} · {it.resolution.by} · {format(new Date(it.resolution.ts), 'HH:mm')}
-                    </p>
-                    {it.resolution.note && <p className="text-sm text-slate-600">{it.resolution.note}</p>}
+                {notes.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {notes.map((n: any) => (
+                      <div key={n.id} className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                        <p className="text-[11px] font-semibold text-slate-600 mb-1">
+                          {n.byBishop ? '✍️ Respuesta del Obispo' : '📝 Nota'} · {n.by}{n.ts ? ' · ' + format(new Date(n.ts), 'HH:mm') : ''}{n.editedAt ? ' (editado)' : ''}
+                        </p>
+                        {n.text && <p className="text-sm text-slate-600">{n.text}</p>}
+                      </div>
+                    ))}
                   </div>
                 )}
                 {!resolved && (canReply || canResolve) && (
@@ -381,7 +412,8 @@ function MUSection({ items, profile, published, onAdd, onEdit, onDelete, onResol
       {!items.length && !showForm && <p className="text-sm text-slate-400 italic mb-3 py-1">Sin actualizaciones de miembros.</p>}
       {items.map((it: MemberUpdateItem) => {
         const mt2 = getMuType(it.muType)
-        const done = !!it.resolution
+        const done = isItemResolved(it)
+        const muNotes = getItemNotes(it)
         const isEditing = editingId === it.id
 
         return (
@@ -426,11 +458,18 @@ function MUSection({ items, profile, published, onAdd, onEdit, onDelete, onResol
                     </div>
                   ))}
                 </div>
-                {done ? (
-                  <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                    <p className="text-[11px] font-semibold text-slate-600 mb-1">✅ Actualizado en registros · {it.resolution!.by}</p>
-                    {it.resolution!.note && <p className="text-sm text-slate-500">{it.resolution!.note}</p>}
+                {muNotes.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {muNotes.map((n: any) => (
+                      <div key={n.id} className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <p className="text-[11px] font-semibold text-slate-600 mb-1">📝 {n.by}{n.ts ? ' · ' + format(new Date(n.ts), 'HH:mm') : ''}{n.editedAt ? ' (editado)' : ''}</p>
+                        {n.text && <p className="text-sm text-slate-500">{n.text}</p>}
+                      </div>
+                    ))}
                   </div>
+                )}
+                {done ? (
+                  <div className="mt-2 p-2 text-[11px] font-semibold text-emerald-700">✅ Actualizado en registros</div>
                 ) : it.readBySec ? (
                   <div className="mt-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">

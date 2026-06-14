@@ -33,6 +33,24 @@ interface YearGroup {
 }
 
 // ── Helpers ───────────────────────────────────────────────────
+// Soporta items en formato viejo (resolution: {note, by, byBishop, ts})
+// y nuevo (notes: [...], resolved: boolean)
+function isItemResolved(item: any): boolean {
+  return typeof item.resolved === 'boolean' ? item.resolved : !!item.resolution
+}
+
+function getItemNotes(item: any): any[] {
+  if (Array.isArray(item.notes)) return item.notes
+  if (item.resolution) {
+    return [{ id: 'legacy', text: item.resolution.note ?? '', by: item.resolution.by, byBishop: item.resolution.byBishop, ts: item.resolution.ts }]
+  }
+  return []
+}
+
+function genId(): string {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)
+}
+
 function buildSundayFolder(sunday: string, reps: Report[]): SundayFolder {
   let totalItems = 0, resolvedItems = 0, urgentUnresolved = 0
   reps.forEach(r => {
@@ -40,7 +58,7 @@ function buildSundayFolder(sunday: string, reps: Report[]): SundayFolder {
       if (!Array.isArray(arr)) return
       arr.forEach((item: any) => {
         totalItems++
-        if (item.resolution) resolvedItems++
+        if (isItemResolved(item)) resolvedItems++
         else if (item.pri?.includes('Urgente')) urgentUnresolved++
       })
     })
@@ -421,14 +439,45 @@ function SundayFolderCard({
 function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; profile: Profile; onRefresh: () => Promise<void> }) {
   const supabase = createClient()
 
-  async function resolveItem(reportId: string, sid: string, itemId: string, note: string, byBishop: boolean) {
+  // Actualiza un item dentro de data[field], aplicando `updater` al item con id === itemId
+  async function updateItem(reportId: string, field: string, itemId: string, updater: (i: any) => any) {
     const rep = reports.find(r => r.id === reportId)
     if (!rep) return
-    const items = ((rep.data as any)[sid] ?? []).map((i: any) =>
-      i.id === itemId ? { ...i, resolution: { note, by: profile.name, byBishop, ts: Date.now() } } : i
-    )
-    await supabase.from('reports').update({ data: { ...rep.data, [sid]: items } }).eq('id', reportId)
+    const items = ((rep.data as any)[field] ?? []).map((i: any) => i.id === itemId ? updater(i) : i)
+    await supabase.from('reports').update({ data: { ...rep.data, [field]: items } }).eq('id', reportId)
     await onRefresh()
+  }
+
+  // Agrega una nota nueva al historial, sin cambiar el estado resuelto/pendiente
+  async function addNote(reportId: string, field: string, itemId: string, text: string, byBishop: boolean) {
+    await updateItem(reportId, field, itemId, i => {
+      const { resolution, ...rest } = i
+      const notes = getItemNotes(i)
+      const newNote = { id: genId(), text, by: profile.name, byBishop, ts: Date.now() }
+      return { ...rest, notes: [...notes, newNote], resolved: isItemResolved(i) }
+    })
+  }
+
+  // Edita el texto de una nota existente (por confusiones o errores)
+  async function editNote(reportId: string, field: string, itemId: string, noteId: string, text: string) {
+    await updateItem(reportId, field, itemId, i => {
+      const { resolution, ...rest } = i
+      const notes = getItemNotes(i).map((n: any) => n.id === noteId ? { ...n, text, editedAt: Date.now() } : n)
+      return { ...rest, notes, resolved: isItemResolved(i) }
+    })
+  }
+
+  // Cambia el estado resuelto/pendiente de forma independiente de las notas
+  async function setResolved(reportId: string, field: string, itemId: string, value: boolean) {
+    await updateItem(reportId, field, itemId, i => {
+      const { resolution, ...rest } = i
+      return {
+        ...rest,
+        notes: getItemNotes(i),
+        resolved: value,
+        ...(value ? { resolvedBy: profile.name, resolvedAt: Date.now() } : { resolvedBy: undefined, resolvedAt: undefined }),
+      }
+    })
   }
 
   async function deleteItem(reportId: string, sid: string, itemId: string) {
@@ -437,16 +486,6 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
     if (!rep) return
     const items = ((rep.data as any)[sid] ?? []).filter((i: any) => i.id !== itemId)
     await supabase.from('reports').update({ data: { ...rep.data, [sid]: items } }).eq('id', reportId)
-    await onRefresh()
-  }
-
-  async function resolveMu(reportId: string, itemId: string, note: string) {
-    const rep = reports.find(r => r.id === reportId)
-    if (!rep) return
-    const items = (rep.data.datos_miembros ?? []).map((i: any) =>
-      i.id === itemId ? { ...i, resolution: { note, by: profile.name, ts: Date.now() } } : i
-    )
-    await supabase.from('reports').update({ data: { ...rep.data, datos_miembros: items } }).eq('id', reportId)
     await onRefresh()
   }
 
@@ -463,7 +502,7 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
   reports.forEach(r => {
     Object.values(r.data ?? {}).forEach((arr: any) => {
       if (!Array.isArray(arr)) return
-      arr.forEach((i: any) => { total++; if (i.resolution) resolved++ })
+      arr.forEach((i: any) => { total++; if (isItemResolved(i)) resolved++ })
     })
   })
 
@@ -509,8 +548,8 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
                   <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: org.color }}>{org.name}</span>
                 </div>
                 {s.isMU
-                  ? items.map((it: any) => <MUCard key={it.id} it={it} repId={repId} profile={profile} onResolve={resolveMu} onDelete={deleteMuItem} />)
-                  : items.map((it: any) => <ItemCard key={it.id} it={it} sid={s.id} sec={s} repId={repId} orgColor={org.color} profile={profile} onResolve={resolveItem} onDelete={deleteItem} />)
+                  ? items.map((it: any) => <MUCard key={it.id} it={it} repId={repId} profile={profile} onAddNote={addNote} onEditNote={editNote} onSetResolved={setResolved} onDelete={deleteMuItem} />)
+                  : items.map((it: any) => <ItemCard key={it.id} it={it} sid={s.id} sec={s} repId={repId} orgColor={org.color} profile={profile} onAddNote={addNote} onEditNote={editNote} onSetResolved={setResolved} onDelete={deleteItem} />)
                 }
               </div>
             ))}
@@ -521,48 +560,81 @@ function FolderContent({ reports, profile, onRefresh }: { reports: Report[]; pro
   )
 }
 
-function ItemCard({ it, sid, sec, repId, orgColor, profile, onResolve, onDelete }: any) {
-  const [showForm, setShowForm] = useState(false)
-  const [note, setNote] = useState('')
-  const [mode, setMode] = useState('resolve' as 'resolve' | 'reply')
-  const resolved = !!it.resolution
-  const canReply = sec.isObisp && isBishopric(profile.role) && !resolved
-  const canResolve = !resolved && isBishopric(profile.role)
+function ItemCard({ it, sid, sec, repId, orgColor, profile, onAddNote, onEditNote, onSetResolved, onDelete }: any) {
+  const [showNoteForm, setShowNoteForm] = useState(false)
+  const [noteText, setNoteText] = useState('')
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editNoteText, setEditNoteText] = useState('')
+  const resolved = isItemResolved(it)
+  const notes = getItemNotes(it)
+  const canAct = isBishopric(profile.role)
   const pc = priColor(it.pri)
 
   return (
-    <div className={`rounded-xl p-3.5 mb-2 border-l-[3px] ${resolved ? 'opacity-55 bg-slate-50' : ''}`}
+    <div className={`rounded-xl p-3.5 mb-2 border-l-[3px] ${resolved ? 'opacity-70 bg-slate-50' : ''}`}
       style={!resolved ? { background: sec.bg, borderLeftColor: orgColor } : { borderLeftColor: '#94a3b8' }}>
       <div className="flex items-start justify-between gap-2 mb-1">
-        <p className={`font-semibold text-sm ${resolved ? 'line-through text-slate-400' : 'text-slate-700'}`}>{it.title}</p>
+        <p className={`font-semibold text-sm ${resolved ? 'text-slate-500' : 'text-slate-700'}`}>{it.title}</p>
         <button onClick={() => onDelete(repId, sid, it.id)} className="icon-btn-delete flex-shrink-0" title="Eliminar"><Trash2 size={13} /></button>
       </div>
       {it.body && <p className="text-sm text-slate-600 mb-2">{it.body}</p>}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full" style={{ background: pc.bg, color: pc.c }}>{it.pri}</span>
-        {resolved && <span className="text-[10px] font-semibold bg-slate-100 text-slate-500 rounded-full px-2 py-0.5">✓ Cerrado</span>}
+        {resolved
+          ? <span className="flex items-center gap-1 text-[10px] font-semibold bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5"><CheckCircle size={11} /> Resuelto</span>
+          : <span className="flex items-center gap-1 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-full px-2 py-0.5"><AlertTriangle size={11} /> Pendiente</span>
+        }
       </div>
-      {resolved && it.resolution && (
-        <div className="mt-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-          <p className="text-[11px] font-semibold text-slate-600 mb-0.5">
-            {it.resolution.byBishop ? '✍️ Respuesta del Obispo' : '✅ Resuelto'} · {it.resolution.by}
-          </p>
-          {it.resolution.note && <p className="text-xs text-slate-500">{it.resolution.note}</p>}
+
+      {notes.length > 0 && (
+        <div className="mt-2.5 space-y-1.5">
+          {notes.map((n: any) => (
+            <div key={n.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[11px] font-semibold text-slate-600 mb-0.5">
+                  {n.byBishop ? '✍️ Respuesta del Obispo' : '📝 Nota'} · {n.by}{n.editedAt ? ' (editado)' : ''}
+                </p>
+                {canAct && editingNoteId !== n.id && (
+                  <button onClick={() => { setEditingNoteId(n.id); setEditNoteText(n.text) }} className="icon-btn-edit flex-shrink-0" title="Editar nota"><Pencil size={12} /></button>
+                )}
+              </div>
+              {editingNoteId === n.id ? (
+                <div className="mt-1">
+                  <textarea className="input min-h-[56px] resize-none text-xs" value={editNoteText} onChange={e => setEditNoteText(e.target.value)} autoFocus />
+                  <div className="flex gap-2 mt-2">
+                    <button className="btn btn-navy btn-sm text-xs" onClick={async () => { await onEditNote(repId, sid, it.id, n.id, editNoteText); setEditingNoteId(null) }}>Guardar</button>
+                    <button className="btn btn-ghost btn-sm text-xs" onClick={() => setEditingNoteId(null)}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                n.text && <p className="text-xs text-slate-500">{n.text}</p>
+              )}
+            </div>
+          ))}
         </div>
       )}
-      {!resolved && (canReply || canResolve) && (
+
+      {canAct && (
         <div className="flex gap-2 mt-2.5 flex-wrap">
-          {canReply && <button onClick={() => { setMode('reply'); setShowForm(true) }} className="btn btn-gold btn-sm text-xs">✍️ Responder</button>}
-          {canResolve && <button onClick={() => { setMode('resolve'); setShowForm(true) }} className="btn btn-green btn-sm text-xs">✅ Marcar resuelto</button>}
+          <button onClick={() => setShowNoteForm(v => !v)} className="btn btn-gold btn-sm text-xs">💬 Agregar nota</button>
+          {resolved
+            ? <button onClick={() => onSetResolved(repId, sid, it.id, false)} className="btn btn-ghost btn-sm text-xs">↩ Marcar pendiente</button>
+            : <button onClick={() => onSetResolved(repId, sid, it.id, true)} className="btn btn-green btn-sm text-xs">✅ Marcar resuelto</button>
+          }
         </div>
       )}
-      {showForm && (
+
+      {showNoteForm && (
         <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-          <label className="label">{mode === 'reply' ? 'Respuesta del Obispo' : 'Nota (opcional)'}</label>
-          <textarea className="input min-h-[56px] resize-none text-sm" value={note} onChange={e => setNote(e.target.value)} autoFocus />
+          <label className="label">{sec.isObisp ? 'Respuesta del Obispo' : 'Nueva nota'}</label>
+          <textarea className="input min-h-[56px] resize-none text-sm" value={noteText} onChange={e => setNoteText(e.target.value)} autoFocus />
           <div className="flex gap-2 mt-2">
-            <button className="btn btn-navy btn-sm" onClick={async () => { await onResolve(repId, sid, it.id, note, mode === 'reply'); setShowForm(false) }}>Confirmar</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}>Cancelar</button>
+            <button className="btn btn-navy btn-sm" onClick={async () => {
+              if (!noteText.trim()) return
+              await onAddNote(repId, sid, it.id, noteText.trim(), !!sec.isObisp)
+              setNoteText(''); setShowNoteForm(false)
+            }}>Enviar</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setShowNoteForm(false); setNoteText('') }}>Cancelar</button>
           </div>
         </div>
       )}
@@ -570,11 +642,15 @@ function ItemCard({ it, sid, sec, repId, orgColor, profile, onResolve, onDelete 
   )
 }
 
-function MUCard({ it, repId, profile, onResolve, onDelete }: any) {
-  const [showForm, setShowForm] = useState(false)
-  const [note, setNote] = useState('')
+function MUCard({ it, repId, profile, onAddNote, onEditNote, onSetResolved, onDelete }: any) {
+  const [showNoteForm, setShowNoteForm] = useState(false)
+  const [noteText, setNoteText] = useState('')
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editNoteText, setEditNoteText] = useState('')
   const mt = getMuType(it.muType)
-  const done = !!it.resolution
+  const resolved = isItemResolved(it)
+  const notes = getItemNotes(it)
+  const canAct = isBishopric(profile.role)
 
   return (
     <div className="rounded-xl p-3.5 mb-2.5 border border-slate-200 bg-white">
@@ -582,6 +658,10 @@ function MUCard({ it, repId, profile, onResolve, onDelete }: any) {
         <p className="font-semibold text-sm text-slate-700">{it.memberName}</p>
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{mt.label}</span>
+          {resolved
+            ? <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5">✅ Actualizado</span>
+            : <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">⏳ Pendiente</span>
+          }
           <button onClick={() => onDelete(repId, it.id)} className="icon-btn-delete" title="Eliminar"><Trash2 size={13} /></button>
         </div>
       </div>
@@ -593,24 +673,55 @@ function MUCard({ it, repId, profile, onResolve, onDelete }: any) {
           </div>
         ))}
       </div>
-      {done ? (
-        <div className="mt-2.5 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-          <p className="text-[11px] font-semibold text-emerald-700">✅ Actualizado · {it.resolution.by}</p>
-          {it.resolution.note && <p className="text-xs text-slate-500 mt-0.5">{it.resolution.note}</p>}
-        </div>
-      ) : (
-        <div className="mt-2.5">
-          <button onClick={() => setShowForm(true)} className="btn btn-green btn-sm text-xs">✅ Marcar actualizado en registros</button>
-          {showForm && (
-            <div className="mt-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-              <label className="label">Nota de confirmación (opcional)</label>
-              <textarea className="input min-h-[56px] resize-none text-sm" value={note} onChange={e => setNote(e.target.value)} autoFocus />
-              <div className="flex gap-2 mt-2">
-                <button className="btn btn-navy btn-sm" onClick={async () => { await onResolve(repId, it.id, note); setShowForm(false) }}>Confirmar</button>
-                <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}>Cancelar</button>
+
+      {notes.length > 0 && (
+        <div className="mt-2.5 space-y-1.5">
+          {notes.map((n: any) => (
+            <div key={n.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[11px] font-semibold text-slate-600 mb-0.5">📝 {n.by}{n.editedAt ? ' (editado)' : ''}</p>
+                {canAct && editingNoteId !== n.id && (
+                  <button onClick={() => { setEditingNoteId(n.id); setEditNoteText(n.text) }} className="icon-btn-edit flex-shrink-0" title="Editar nota"><Pencil size={12} /></button>
+                )}
               </div>
+              {editingNoteId === n.id ? (
+                <div className="mt-1">
+                  <textarea className="input min-h-[56px] resize-none text-xs" value={editNoteText} onChange={e => setEditNoteText(e.target.value)} autoFocus />
+                  <div className="flex gap-2 mt-2">
+                    <button className="btn btn-navy btn-sm text-xs" onClick={async () => { await onEditNote(repId, 'datos_miembros', it.id, n.id, editNoteText); setEditingNoteId(null) }}>Guardar</button>
+                    <button className="btn btn-ghost btn-sm text-xs" onClick={() => setEditingNoteId(null)}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                n.text && <p className="text-xs text-slate-500 mt-0.5">{n.text}</p>
+              )}
             </div>
-          )}
+          ))}
+        </div>
+      )}
+
+      {canAct && (
+        <div className="flex gap-2 mt-2.5 flex-wrap">
+          <button onClick={() => setShowNoteForm(v => !v)} className="btn btn-gold btn-sm text-xs">💬 Agregar nota</button>
+          {resolved
+            ? <button onClick={() => onSetResolved(repId, 'datos_miembros', it.id, false)} className="btn btn-ghost btn-sm text-xs">↩ Marcar pendiente</button>
+            : <button onClick={() => onSetResolved(repId, 'datos_miembros', it.id, true)} className="btn btn-green btn-sm text-xs">✅ Marcar actualizado</button>
+          }
+        </div>
+      )}
+
+      {showNoteForm && (
+        <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+          <label className="label">Nueva nota</label>
+          <textarea className="input min-h-[56px] resize-none text-sm" value={noteText} onChange={e => setNoteText(e.target.value)} autoFocus />
+          <div className="flex gap-2 mt-2">
+            <button className="btn btn-navy btn-sm" onClick={async () => {
+              if (!noteText.trim()) return
+              await onAddNote(repId, 'datos_miembros', it.id, noteText.trim(), false)
+              setNoteText(''); setShowNoteForm(false)
+            }}>Enviar</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setShowNoteForm(false); setNoteText('') }}>Cancelar</button>
+          </div>
         </div>
       )}
     </div>

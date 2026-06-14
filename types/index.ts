@@ -151,6 +151,15 @@ export interface Profile {
   created_at: string
 }
 
+export interface ReportNote {
+  id: string
+  text: string
+  by: string
+  byBishop?: boolean
+  ts: number
+  editedAt?: number
+}
+
 export interface ReportItem {
   id: string
   title: string
@@ -163,6 +172,10 @@ export interface ReportItem {
     byBishop: boolean
     ts: number
   }
+  notes?: ReportNote[]
+  resolved?: boolean
+  resolvedBy?: string
+  resolvedAt?: number
 }
 
 export interface MemberUpdateItem {
@@ -179,6 +192,10 @@ export interface MemberUpdateItem {
     by: string
     ts: number
   }
+  notes?: ReportNote[]
+  resolved?: boolean
+  resolvedBy?: string
+  resolvedAt?: number
 }
 
 export interface ReportData {
